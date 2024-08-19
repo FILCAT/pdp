@@ -10,8 +10,8 @@ contract PDPService is Ownable {
     uint256 public challengeFinality;
 
     // Methods
-    constructor(uint256 _challengePeriod) Ownable(msg.sender) {
-        challengePeriod = _challengePeriod;
+    constructor(uint256 _challengeFinality) Ownable(msg.sender) {
+        challengeFinality = _challengeFinality;
     }
 
 }

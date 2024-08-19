@@ -8,10 +8,10 @@ contract PDPServiceOwnershipTest is Test {
    PDPService pdpService;
 
     function setUp() public {
-        pdpService = new PDPService();
+        pdpService = new PDPService(2);
     }
 
-    function testOwnerIsConstructorSender() public {
+    function testOwnerIsConstructorSender() public view {
         address expectedOwner = address(this);
         address actualOwner = pdpService.owner();
         assertEq(expectedOwner, actualOwner, "Owner should be the constructor sender");
