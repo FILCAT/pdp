@@ -14,8 +14,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install dependencies
-      run: make
+    - name: configure
+      run: |
+        curl -L https://foundry.paradigm.xyz | bash
+        source ~/.bashrc
+        foundryup
 
     - name: Run build
       run: make build
