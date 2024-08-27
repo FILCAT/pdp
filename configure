@@ -4,5 +4,5 @@
 curl -L https://foundry.paradigm.xyz | bash
 source /home/runner/.bashrc
 ls /home/runner/.config/.foundry/bin
-echo $PATH
+export PATH="/home/runner/.config/.foundry/bin:$PATH"
 foundryup
