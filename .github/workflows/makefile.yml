@@ -19,10 +19,10 @@ jobs:
 
     - name: Run build
       run: |
-      source $GITHUB_PATH
+      export PATH="/home/runner/.config/.foundry/bin:$PATH"
       make build
 
     - name: Run tests
       run: |
-      source $GITHUB_PATH
+      export PATH="/home/runner/.config/.foundry/bin:$PATH"
       make test
