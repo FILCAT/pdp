@@ -18,7 +18,11 @@ jobs:
       run: ./configure
 
     - name: Run build
-      run: make build
+      run: |
+      source $GITHUB_PATH
+      make build
 
     - name: Run tests
-      run: make test
+      run: |
+      source $GITHUB_PATH
+      make test
