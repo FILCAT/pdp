@@ -1,0 +1,6 @@
+#!/bin/bash
+
+# GH Actions foundry setup
+curl -L https://foundry.paradigm.xyz | bash
+source /home/runner/.bashrc
+foundryup

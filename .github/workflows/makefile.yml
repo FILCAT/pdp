@@ -15,8 +15,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: configure
-      run: |
-        curl -L https://foundry.paradigm.xyz | bash && source /home/runner/.bashrc && foundryup
+      run: ./configure
 
     - name: Run build
       run: make build
