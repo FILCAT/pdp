@@ -19,8 +19,8 @@ jobs:
 
     - name: Run build
       run: |
-      export PATH="/home/runner/.config/.foundry/bin:$PATH";
-      make build;
+        export PATH="/home/runner/.config/.foundry/bin:$PATH";
+        make build;
 
 
     - name: Run tests
