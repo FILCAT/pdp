@@ -16,9 +16,7 @@ jobs:
 
     - name: configure
       run: |
-        curl -L https://foundry.paradigm.xyz | bash
-        source /home/runner/.bashrc
-        foundryup
+        curl -L https://foundry.paradigm.xyz | bash && source /home/runner/.bashrc && foundryup
 
     - name: Run build
       run: make build
