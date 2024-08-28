@@ -72,6 +72,9 @@ contract PDPService is Ownable {
 
     // Removes a proof set. Must be called by the contract owner.   
     function deleteProofSet(uint256 setId) public {
+        if (setId >= proofSetDeleted.length) {
+            revert("proof set id out of bounds");
+        }
         if (proofSetDeleted[setId]) {
             revert("Proof set already deleted");
         }
