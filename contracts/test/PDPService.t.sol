@@ -70,3 +70,32 @@ contract PDPServiceProofSetCreateDeleteTest is Test {
         assertEq(2, pdpService.getNextProofSetId(), "Next proof set ID should be 2");
     }
 }
+
+contract SumTreeInternalTestPDPService is PDPService {
+    constructor(uint256 _challengeFinality) PDPService(_challengeFinality) {}
+
+    function testHeightFromIndex(uint32 index) public view returns (uint8) {
+        return heightFromIndex(index);
+    }
+}
+
+contract SumTreeHeightTest is Test {
+    SumTreeInternalTestPDPService pdpService;
+
+    function setUp() public {
+        pdpService = new SumTreeInternalTestPDPService(2);
+    }
+
+    function testHeightFromIndex() public {
+        uint8[105] memory oeisA001511 = [
+            1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 6, 
+            1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 7, 
+            1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 6, 
+            1, 2, 1, 3, 1, 2, 1, 4, 1
+        ];
+        for (uint32 i = 0; i < 105; i++) {
+            assertEq(oeisA001511[i], pdpService.testHeightFromIndex(i) + 1, "Heights from index 0 to 104 should match OEIS A001511");
+        }
+    }
+}
+
