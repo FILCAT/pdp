@@ -4,6 +4,14 @@ pragma solidity ^0.8.13;
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract PDPService {
+    // Constants
+    uint256 constant CHUNK_SIZE = 256;
+    int32 constant MASK16 = 0x0000FFFF;
+    int32 constant MASK8 = 0x00FF00FF;
+    int32 constant MASK4 = 0x0F0F0F0F;
+    int32 constant MASK2 = 0x33333333;
+    int32 constant MASK1 = 0x55555555;
+
     // Types 
     // TODO PERF: https://github.com/FILCAT/pdp/issues/16#issuecomment-2329836995 
     struct Cid {
@@ -136,12 +144,22 @@ contract PDPService {
     }
 
     // Appends a new root to the collection managed by a proof set.
-    // Must be called by the contract owner.
-    function addRoot(uint256 setId, Cid calldata root, uint256 size) public returns (uint256) {
+    // Must be called by the contract owner.  
+    function addRoot(uint256 setId, Cid calldata root, uint256 rawSize) public returns (uint256) {
+        if (setId >= nextProofSetId) {
+            revert("proof set id out of bounds");
+        }
         require(proofSetOwner[setId] == msg.sender, "Only the owner can add roots");
-        // TODO: implement me
+        require(rawSize % CHUNK_SIZE == 0, "Size must be a multiple of CHUNK_SIZE");
+
+        uint256 size = rawSize / CHUNK_SIZE;
+        rootCids[setId].push(root);
+        rootSizes[setId].push(size);
+        //sumTreeAdd(setId, size);
         return 0;
     }
+
+
 
     // Removes a root from a proof set. Must be called by the contract owner.
     function removeRoot(uint256 setId, uint256 rootId) public {
@@ -157,4 +175,39 @@ contract PDPService {
         // TODO: implement me
         // TODO: ownership check for proof validation? I don't think its necessary but maybe useful? 
     }
+
+    // Perform sumtree addition 
+    // // 
+    // function sumTreeAdd(uint256 setId, uint256 size) internal {
+    //     uint256 index = sumTreeSizes[setId].length;
+        
+    //     // BaseArray[j - 2^i] for i in [0, h)
+    //     for (i = 0; i < h; i++) 
+    // }
+
+    // Return height of sumtree node at given index
+    // Calculated by taking the trailing zeros of 1 plus the index
+    function heightFromIndex(uint32 index) internal pure returns (uint8) {
+        uint8 h = 31; // Operating on index + 1 means we never have index == 0 so there's always a leading 1
+        int32 v = -int32(index + 1);
+        v = v & int32(index+1);
+        if (v & MASK16 != 0) {
+            h -= 16;
+        }
+        if (v & MASK8 != 0) {
+            h -= 8;
+        }
+        if (v & MASK4 != 0) {
+            h -= 4;
+        }
+        if (v & MASK2 != 0) {
+            h -= 2;
+        }
+        if (v & MASK1 != 0) {
+            h -= 1;
+        }
+
+        return h;
+    }
+
 }
