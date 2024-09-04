@@ -136,6 +136,7 @@ contract PDPService {
         if (setId >= nextProofSetId) {
             revert("proof set id out of bounds");
         }
+
         require(proofSetOwner[setId] == msg.sender, "Only the owner can delete proof sets");
 
         proofSetSize[setId] = 0;
@@ -152,8 +153,6 @@ contract PDPService {
         require(rawSize % CHUNK_SIZE == 0, "Size must be a multiple of CHUNK_SIZE");
 
         uint256 size = rawSize / CHUNK_SIZE;
-        rootCids[setId].push(root);
-        rootSizes[setId].push(size);
         sumTreeAdd(setId, size);
         return 0;
     }
@@ -178,16 +177,16 @@ contract PDPService {
     // Perform sumtree addition 
     // 
     function sumTreeAdd(uint256 setId, uint256 size) internal {
-        uint32 index = uint32(sumTreeSizes[setId].length);
+        uint32 index = uint32(nextRootId[setId]);
         uint32 h = heightFromIndex(index);
         
         uint256 sum = size;
         // Sum BaseArray[j - 2^i] for i in [0, h)
         for (uint32 i = 0; i < h; i++) {
-            uint32 j = index - (1 << i);
+            uint32 j = index - uint32(1 << i);
             sum += sumTreeSizes[setId][j];
         }
-        sumTreeSizes[setId].push(sum);        
+        sumTreeSizes[setId][nextRootId[setId]] = sum;        
     }
 
     // Return height of sumtree node at given index
