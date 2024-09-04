@@ -4,19 +4,6 @@ pragma solidity ^0.8.13;
 import {Test, console} from "forge-std/Test.sol";
 import {PDPService} from "../src/PDPService.sol";
 
-contract PDPServiceOwnershipTest is Test {
-   PDPService pdpService;
-
-    function setUp() public {
-        pdpService = new PDPService(2);
-    }
-
-    function testOwnerIsConstructorSender() public view {
-        address expectedOwner = address(this);
-        address actualOwner = pdpService.owner();
-        assertEq(expectedOwner, actualOwner, "Owner should be the constructor sender");
-    } 
-}
 
 contract PDPServiceProofSetCreateDeleteTest is Test {
     PDPService pdpService;
@@ -28,28 +15,47 @@ contract PDPServiceProofSetCreateDeleteTest is Test {
     function testCreateProofSet() public {
         uint256 setId = pdpService.createProofSet();
         assertEq(setId, 0, "First proof set ID should be 0");
-        assertFalse(pdpService.proofSetDeleted(setId), "Proof set should not be marked as deleted");
-        assertEq(pdpService.proofSetSize(setId), 0, "Proof set size should be 0");
+        assertEq(pdpService.getProofSetSize(setId), 0, "Proof set size should be 0");
+        assertEq(pdpService.getProofSetOwner(setId), address(this), "Proof set owner should be the constructor sender");
     }
 
     function testDeleteProofSet() public {
         uint256 setId = pdpService.createProofSet();
         pdpService.deleteProofSet(setId);
-        assertTrue(pdpService.proofSetDeleted(setId), "Proof set should be marked as deleted");
-        assertEq(pdpService.proofSetSize(setId), 0, "Proof set size should be 0 after deletion");
+        assertEq(pdpService.getProofSetSize(setId), 0, "Proof set size should be 0 after deletion");
+        assertEq(pdpService.getProofSetOwner(setId), address(0), "Proof set owner should be the constructor sender");
+    }
+
+    function testOnlyOwnerCanDeleteProofSet() public {
+        uint256 setId = pdpService.createProofSet();
+        // Create a new address to act as a non-owner
+        address nonOwner = address(0x1234);
+        // Expect revert when non-owner tries to delete the proof set
+        vm.prank(nonOwner);
+        vm.expectRevert("Only the owner can delete proof sets");
+        pdpService.deleteProofSet(setId);
+
+        // Now verify the owner can delete the proof set
+        pdpService.deleteProofSet(setId);
+        assertEq(pdpService.getProofSetOwner(setId), address(0), "Proof set should be deleted");
     }
 
     // TODO: once we have addRoot we should test deletion of a non empty proof set
-
     function testCannotDeleteNonExistentProofSet() public {
         vm.expectRevert("proof set id out of bounds");
         pdpService.deleteProofSet(0);
     }
 
-    function testCannotDeleteAlreadyDeletedProofSet() public {
+    function testDeleteAlreadyDeletedProofSetFails() public {
         uint256 setId = pdpService.createProofSet();
         pdpService.deleteProofSet(setId);
-        vm.expectRevert("Proof set already deleted");
+        vm.expectRevert("Only the owner can delete proof sets");
         pdpService.deleteProofSet(setId);
+    }
+
+    function testGetProofSetID() public {
+        pdpService.createProofSet();
+        pdpService.createProofSet();
+        assertEq(2, pdpService.getNextProofSetId(), "Next proof set ID should be 2");
     }
 }
