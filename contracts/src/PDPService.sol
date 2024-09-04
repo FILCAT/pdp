@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract PDPService {
     // Constants
@@ -12,7 +11,7 @@ contract PDPService {
     int32 constant MASK2 = 0x33333333;
     int32 constant MASK1 = 0x55555555;
 
-    // Types 
+    // Types
     // TODO PERF: https://github.com/FILCAT/pdp/issues/16#issuecomment-2329836995 
     struct Cid {
         bytes data;
@@ -144,7 +143,7 @@ contract PDPService {
     }
 
     // Appends a new root to the collection managed by a proof set.
-    // Must be called by the contract owner.  
+    // Must be called by the proof set owner.  
     function addRoot(uint256 setId, Cid calldata root, uint256 rawSize) public returns (uint256) {
         if (setId >= nextProofSetId) {
             revert("proof set id out of bounds");
@@ -155,7 +154,7 @@ contract PDPService {
         uint256 size = rawSize / CHUNK_SIZE;
         rootCids[setId].push(root);
         rootSizes[setId].push(size);
-        //sumTreeAdd(setId, size);
+        sumTreeAdd(setId, size);
         return 0;
     }
 
@@ -177,13 +176,19 @@ contract PDPService {
     }
 
     // Perform sumtree addition 
-    // // 
-    // function sumTreeAdd(uint256 setId, uint256 size) internal {
-    //     uint256 index = sumTreeSizes[setId].length;
+    // 
+    function sumTreeAdd(uint256 setId, uint256 size) internal {
+        uint32 index = uint32(sumTreeSizes[setId].length);
+        uint32 h = heightFromIndex(index);
         
-    //     // BaseArray[j - 2^i] for i in [0, h)
-    //     for (i = 0; i < h; i++) 
-    // }
+        uint256 sum = size;
+        // Sum BaseArray[j - 2^i] for i in [0, h)
+        for (uint32 i = 0; i < h; i++) {
+            uint32 j = index - (1 << i);
+            sum += sumTreeSizes[setId][j];
+        }
+        sumTreeSizes[setId].push(sum);        
+    }
 
     // Return height of sumtree node at given index
     // Calculated by taking the trailing zeros of 1 plus the index
