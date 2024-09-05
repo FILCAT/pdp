@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 
 contract PDPService {
     // Constants
-    uint256 constant CHUNK_SIZE = 256;
+    uint256 public constant CHUNK_SIZE = 256;
     int32 constant MASK16 = 0x0000FFFF;
     int32 constant MASK8 = 0x00FF00FF;
     int32 constant MASK4 = 0x0F0F0F0F;
@@ -143,21 +143,35 @@ contract PDPService {
         proofSetOwner[setId] = address(0);
     }
 
-    // Appends a new root to the collection managed by a proof set.
-    // Must be called by the proof set owner.  
-    function addRoot(uint256 setId, Cid calldata root, uint256 rawSize) public returns (uint256) {
+    // Struct for tracking root data
+    struct RootData {
+        Cid root;
+        uint256 rawSize;
+    }
+
+    function addRoot(uint256 setId, RootData[] calldata rootData) public {
         if (setId >= nextProofSetId) {
             revert("proof set id out of bounds");
         }
-        require(proofSetOwner[setId] == msg.sender, "Only the owner can add roots");
-        require(rawSize % CHUNK_SIZE == 0, "Size must be a multiple of CHUNK_SIZE");
+        for (uint256 i = 0; i < rootData.length; i++) {
+            addOneRoot(setId, i, rootData[i].root, rootData[i].rawSize);
+        }
+    }
+
+    // Appends a new root to the collection managed by a proof set.
+    // Must be called by the proof set owner.  
+    function addOneRoot(uint256 setId, uint256 callIdx, Cid calldata root, uint256 rawSize) internal returns (uint256) {
+        require(proofSetOwner[setId] == msg.sender, "Fail at idx: Only the owner can add roots");
+        require(rawSize % CHUNK_SIZE == 0, "Fail at idx: Size must be a multiple of CHUNK_SIZE");
 
         uint256 size = rawSize / CHUNK_SIZE;
         sumTreeAdd(setId, size);
+        uint256 rootId = nextRootId[setId]++;
+        rootCids[setId][rootId] = root;
+        rootSizes[setId][rootId] = size;
+        proofSetSize[setId] += size;
         return 0;
     }
-
-
 
     // Removes a root from a proof set. Must be called by the contract owner.
     function removeRoot(uint256 setId, uint256 rootId) public {

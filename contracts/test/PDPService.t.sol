@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
 import {Test, console} from "forge-std/Test.sol";
@@ -99,3 +98,56 @@ contract SumTreeHeightTest is Test {
     }
 }
 
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.13;
+
+import "forge-std/Test.sol";
+import "../src/PDPService.sol";
+
+contract SumTreeAddTest is Test {
+    PDPService pdpService;
+    uint256 testSetId;
+
+    function setUp() public {
+        pdpService = new PDPService(100); // Assuming 100 as challengeFinality
+        testSetId = pdpService.createProofSet();
+    }
+
+    function testSumTreeAdd() public {
+        uint256[] memory sizes = new uint256[](8);
+        sizes[0] = 200;
+        sizes[1] = 100;
+        sizes[2] = 0;
+        sizes[3] = 30;
+        sizes[4] = 50;
+        sizes[5] = 0;
+        sizes[6] = 400;
+        sizes[7] = 40;
+
+        uint256[] memory expectedSumTreeSizes = new uint256[](8);
+        expectedSumTreeSizes[0] = 200;
+        expectedSumTreeSizes[1] = 300;
+        expectedSumTreeSizes[2] = 0;
+        expectedSumTreeSizes[3] = 330;
+        expectedSumTreeSizes[4] = 50;
+        expectedSumTreeSizes[5] = 50;
+        expectedSumTreeSizes[6] = 400;
+        expectedSumTreeSizes[7] = 820;
+
+        for (uint256 i = 0; i < sizes.length; i++) {
+            PDPService.Cid memory testCid = PDPService.Cid(abi.encodePacked("test", i));
+            PDPService.RootData[] memory rootDataArray = new PDPService.RootData[](1);
+            rootDataArray[0] = PDPService.RootData(testCid, sizes[i] * pdpService.CHUNK_SIZE());
+            pdpService.addRoot(testSetId, rootDataArray);
+
+            // Assert that the root was added
+            assertEq(pdpService.getRootCid(testSetId, i).data, testCid.data, "Root not added correctly");
+
+            // Assert that the sum tree size is correct
+            assertEq(pdpService.getSumTreeSize(testSetId, i), expectedSumTreeSizes[i], "Incorrect sum tree size");
+        }
+
+        // Assert final proof set size
+        assertEq(pdpService.getProofSetSize(testSetId), 820, "Incorrect final proof set size");
+    }
+}
