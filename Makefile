@@ -11,7 +11,7 @@ build:
 	cd contracts && forge build
 
 test:
-	cd contracts && forge test
+	cd contracts && forge test -vv
 
 deploy:
 	cd contracts && forge create --rpc-url $(ETH_RPC_URL) --keystore $(KEYSTORE_PATH) --password $(PASSWORD) src/PDPService.sol:PDPService --constructor-args $(CHALLENGE_FINALITY)
