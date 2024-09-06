@@ -68,42 +68,49 @@ contract PDPService {
         return nextProofSetId;
     }
 
+    // Returns false if the proof set is 1) not yet created 2) deleted
+    function proofSetLive(uint256 setId) public view returns (bool) {
+        return setId < nextProofSetId && proofSetOwner[setId] != address(0);
+    }
+
+    // Returns false if the proof set is not live or if the root id is 1) not yet created 2) deleted
+    function rootLive(uint256 setId, uint256 rootId) public view returns (bool) {
+        return proofSetLive(setId) && rootId < nextRootId[setId] && rootSizes[setId][rootId] > 0;
+    }
+
     // Returns the size of a proof set
     function getProofSetSize(uint256 setId) public view returns (uint256) {
-        require(setId < nextProofSetId, "Proof set ID out of bounds");
+        require(proofSetLive(setId), "Proof set not live");
         return proofSetSize[setId];
     }
 
     // Returns the next root ID for a proof set
     function getNextRootId(uint256 setId) public view returns (uint256) {
-        require(setId < nextProofSetId, "Proof set ID out of bounds");
+        require(proofSetLive(setId), "Proof set not live");
         return nextRootId[setId];
     }
 
     // Returns the owner of a proof set
     function getProofSetOwner(uint256 setId) public view returns (address) {
-        require(setId < nextProofSetId, "Proof set ID out of bounds");
+        require(proofSetLive(setId), "Proof set not live");
         return proofSetOwner[setId];
     }
 
     // Returns the root CID for a given proof set and root ID
     function getRootCid(uint256 setId, uint256 rootId) public view returns (Cid memory) {
-        require(setId < nextProofSetId, "Proof set ID out of bounds");
-        require(rootId < nextRootId[setId], "Root ID out of bounds");
+        require(proofSetLive(setId), "Proof set not live");
         return rootCids[setId][rootId];
     }
 
     // Returns the root size for a given proof set and root ID
     function getRootSize(uint256 setId, uint256 rootId) public view returns (uint256) {
-        require(setId < nextProofSetId, "Proof set ID out of bounds");
-        require(rootId < nextRootId[setId], "Root ID out of bounds");
+        require(proofSetLive(setId), "Proof set not live");
         return rootSizes[setId][rootId];
     }
 
     // Returns the sum tree size for a given proof set and root ID
     function getSumTreeSize(uint256 setId, uint256 rootId) public view returns (uint256) {
-        require(setId < nextProofSetId, "Proof set ID out of bounds");
-        require(rootId < nextRootId[setId], "Root ID out of bounds");
+        require(proofSetLive(setId), "Proof set not live");
         return sumTreeSizes[setId][rootId];
     }
 

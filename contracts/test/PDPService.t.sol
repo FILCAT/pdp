@@ -22,8 +22,8 @@ contract PDPServiceProofSetCreateDeleteTest is Test {
     function testDeleteProofSet() public {
         uint256 setId = pdpService.createProofSet();
         pdpService.deleteProofSet(setId);
-        assertEq(pdpService.getProofSetSize(setId), 0, "Proof set size should be 0 after deletion");
-        assertEq(pdpService.getProofSetOwner(setId), address(0), "Proof set owner should be the constructor sender");
+        vm.expectRevert("Proof set not live");
+        pdpService.getProofSetSize(setId);
     }
 
     function testOnlyOwnerCanDeleteProofSet() public {
@@ -37,7 +37,8 @@ contract PDPServiceProofSetCreateDeleteTest is Test {
 
         // Now verify the owner can delete the proof set
         pdpService.deleteProofSet(setId);
-        assertEq(pdpService.getProofSetOwner(setId), address(0), "Proof set should be deleted");
+        vm.expectRevert("Proof set not live");
+        pdpService.getProofSetOwner(setId);
     }
 
     // TODO: once we have addRoot we should test deletion of a non empty proof set
@@ -46,11 +47,21 @@ contract PDPServiceProofSetCreateDeleteTest is Test {
         pdpService.deleteProofSet(0);
     }
 
-    function testDeleteAlreadyDeletedProofSetFails() public {
+    function testMethodsOnDeletedProofSetFails() public {
         uint256 setId = pdpService.createProofSet();
         pdpService.deleteProofSet(setId);
         vm.expectRevert("Only the owner can delete proof sets");
         pdpService.deleteProofSet(setId);
+        vm.expectRevert("Proof set not live");
+        pdpService.getProofSetOwner(setId);
+        vm.expectRevert("Proof set not live");
+        pdpService.getProofSetSize(setId);
+        vm.expectRevert("Proof set not live");
+        pdpService.getRootCid(setId, 0);
+        vm.expectRevert("Proof set not live");
+        pdpService.getRootSize(setId, 0);
+        vm.expectRevert("Proof set not live");
+        pdpService.getSumTreeSize(setId, 0);
     }
 
     function testGetProofSetID() public {
