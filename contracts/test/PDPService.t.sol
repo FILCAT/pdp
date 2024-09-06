@@ -113,6 +113,27 @@ contract SumTreeAddTest is Test {
         testSetId = pdpService.createProofSet();
     }
 
+    function testMultiAdd() public {
+        uint256[] memory sizes = new uint256[](8);
+        sizes[0] = 5;
+        sizes[1] = 5;
+        sizes[2] = 5;
+        sizes[3] = 5;
+        sizes[4] = 5;
+        sizes[5] = 5;
+        sizes[6] = 5;
+        sizes[7] = 5;
+
+        PDPService.RootData[] memory rootDataArray = new PDPService.RootData[](8);
+
+        for (uint256 i = 0; i < sizes.length; i++) {
+            PDPService.Cid memory testCid = PDPService.Cid(abi.encodePacked("test", i));
+            rootDataArray[i] = PDPService.RootData(testCid, sizes[i] * pdpService.CHUNK_SIZE());
+        }
+        pdpService.addRoot(testSetId, rootDataArray);
+        assertEq(pdpService.getProofSetSize(testSetId), 40, "Incorrect final proof set size");
+    }
+
     function testSumTreeAdd() public {
         uint256[] memory sizes = new uint256[](8);
         sizes[0] = 200;
