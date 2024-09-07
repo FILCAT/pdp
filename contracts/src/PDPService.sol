@@ -150,9 +150,7 @@ contract PDPService {
     }
 
     function addRoot(uint256 setId, RootData[] calldata rootData) public {
-        if (setId >= nextProofSetId) {
-            revert("proof set id out of bounds");
-        }
+        require(proofSetLive(setId), "Proof set not live");
         for (uint256 i = 0; i < rootData.length; i++) {
             addOneRoot(setId, i, rootData[i].root, rootData[i].rawSize);
         }
