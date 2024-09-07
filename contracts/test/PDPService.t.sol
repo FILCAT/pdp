@@ -61,6 +61,8 @@ contract PDPServiceProofSetCreateDeleteTest is Test {
         pdpService.getRootSize(setId, 0);
         vm.expectRevert("Proof set not live");
         pdpService.getSumTreeSize(setId, 0);
+        vm.expectRevert("Proof set not live");
+        pdpService.addRoot(setId, new PDPService.RootData[](0));
     }
 
     function testGetProofSetID() public {
