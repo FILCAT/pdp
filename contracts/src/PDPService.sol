@@ -156,11 +156,17 @@ contract PDPService {
         }
     }
 
+    error IndexedError(uint256 idx, string msg);
+
     // Appends a new root to the collection managed by a proof set.
     // Must be called by the proof set owner.  
     function addOneRoot(uint256 setId, uint256 callIdx, Cid calldata root, uint256 rawSize) internal returns (uint256) {
-        require(proofSetOwner[setId] == msg.sender, "Fail at idx: Only the owner can add roots");
-        require(rawSize % CHUNK_SIZE == 0, "Fail at idx: Size must be a multiple of CHUNK_SIZE");
+        if (proofSetOwner[setId] != msg.sender) {
+            revert IndexedError(callIdx, "Only the owner can add roots");
+        }
+        if (rawSize % CHUNK_SIZE != 0) {
+            revert IndexedError(callIdx, "Size must be a multiple of CHUNK_SIZE");
+        }
 
         uint256 size = rawSize / CHUNK_SIZE;
         sumTreeAdd(setId, size);
