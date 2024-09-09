@@ -177,10 +177,64 @@ contract PDPService {
         return 0;
     }
 
-    // Removes a root from a proof set. Must be called by the contract owner.
+    // removeRoot removes a root from a proof set. Must be called by the contract owner.
     function removeRoot(uint256 setId, uint256 rootId) public {
         require(proofSetOwner[setId] == msg.sender, "Only the owner can remove roots");
         // TODO: implement me
+    }
+
+    // findRoot returns the root id for a given chunk index
+    // It does this by running a binary search over the logical array
+    // To do this efficiently we walk the sumtree 
+    function findRootId(uint256 setId, uint256 chunkIndex) public view returns (uint256) { 
+        require(chunkIndex < proofSetSize[setId], "Chunk index out of bounds");
+        // The top of the sumtree is the largest power of 2 less than the number of roots
+        uint256 top = 256 - clz(nextRootId[setId]);
+        uint256 searchPtr = (1 << top) - 1;
+        uint256 acc = 0;
+
+        //Binary search until we find the index of the sumtree leaf covering the index range
+        for (uint256 h = top; h > 0; h--) {
+            // Search has taken us past the end of the sumtree
+            // Only option is to go left
+            if (searchPtr >= nextRootId[setId]) {
+                searchPtr -= 1 << (h - 1);
+                continue;
+            }
+
+            uint256 candidate = acc + sumTreeSizes[setId][searchPtr]; 
+            // Go right            
+            if (candidate <= chunkIndex) { 
+                acc += sumTreeSizes[setId][searchPtr];
+                searchPtr += 1 << (h - 1);
+            } else {
+                // Go left
+                searchPtr -= 1 << (h - 1);
+            }
+        }
+        uint256 candidate = acc + sumTreeSizes[setId][searchPtr];
+        if (candidate <= chunkIndex) {
+            // Choose right 
+            searchPtr += 1;
+        } // else choose left
+
+        return searchPtr;
+    }
+    // TODO: combine with function merging in merkle proof testing PR
+    // Helper function to calculate the number of leading zeros in binary representation
+    function clz(uint256 x) internal pure returns (uint256) {
+        uint256 n = 256;
+        uint256 y;
+
+        y = x >> 128; if (y != 0) { n -= 128; x = y; }
+        y = x >> 64;  if (y != 0) { n -= 64;  x = y; }
+        y = x >> 32;  if (y != 0) { n -= 32;  x = y; }
+        y = x >> 16;  if (y != 0) { n -= 16;  x = y; }
+        y = x >> 8;   if (y != 0) { n -= 8;   x = y; }
+        y = x >> 4;   if (y != 0) { n -= 4;   x = y; }
+        y = x >> 2;   if (y != 0) { n -= 2;   x = y; }
+        y = x >> 1;   if (y != 0) return n - 2;
+        return n - x;
     }
 
     // Verifies and records that the provider proved possession of the 
