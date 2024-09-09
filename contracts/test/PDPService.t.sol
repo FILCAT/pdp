@@ -182,4 +182,88 @@ contract SumTreeAddTest is Test {
         // Assert final proof set leaf count
         assertEq(pdpService.getProofSetLeafCount(testSetId), 820, "Incorrect final proof set leaf count");
     }
+
+    function testFindRootId() public {
+        // Set up the same array as in testSumTreeAdd
+        uint256[] memory sizes = new uint256[](8);
+        sizes[0] = 200;
+        sizes[1] = 100;
+        sizes[2] = 0;
+        sizes[3] = 30;
+        sizes[4] = 50;
+        sizes[5] = 0;
+        sizes[6] = 400;
+        sizes[7] = 40;
+
+        // Add roots to the proof set
+        for (uint256 i = 0; i < sizes.length; i++) {
+            PDPService.Cid memory testCid = PDPService.Cid(abi.encodePacked("test", i));
+            PDPService.RootData[] memory rootDataArray = new PDPService.RootData[](1);
+            rootDataArray[0] = PDPService.RootData(testCid, sizes[i] * pdpService.CHUNK_SIZE());
+            pdpService.addRoot(testSetId, rootDataArray);
+        }
+
+        // Test findRootId for various positions
+        assertEq(pdpService.findRootId(testSetId, 0), 0, "Should find root 0 at root id 0");
+        assertEq(pdpService.findRootId(testSetId, 199), 0, "Should find root 0 at position 199");
+        assertEq(pdpService.findRootId(testSetId, 200), 1, "Should find root 1 at position 200");
+        assertEq(pdpService.findRootId(testSetId, 299), 1, "Should find root 1 at position 299");
+        assertEq(pdpService.findRootId(testSetId, 300), 3, "Should find root 3 at position 300");
+        assertEq(pdpService.findRootId(testSetId, 329), 3, "Should find root 3 at position 329");
+        assertEq(pdpService.findRootId(testSetId, 330), 4, "Should find root 4 at position 330");
+        assertEq(pdpService.findRootId(testSetId, 379), 4, "Should find root 4 at position 379");
+        assertEq(pdpService.findRootId(testSetId, 380), 6, "Should find root 6 at position 380");
+        assertEq(pdpService.findRootId(testSetId, 779), 6, "Should find root 6 at position 779");
+        assertEq(pdpService.findRootId(testSetId, 780), 7, "Should find root 7 at position 780");
+        assertEq(pdpService.findRootId(testSetId, 819), 7, "Should find root 7 at position 819");
+
+        // Test edge cases
+        vm.expectRevert("Chunk index out of bounds");
+        pdpService.findRootId(testSetId, 820);
+
+        vm.expectRevert("Chunk index out of bounds");
+        pdpService.findRootId(testSetId, 1000);
+    }
+
+    function testFindRootIdTraverseOffTheEdge() public {
+        uint256[] memory sizes = new uint256[](5);
+        sizes[0] = 0;
+        sizes[1] = 0;
+        sizes[2] = 0;
+        sizes[3] = 1;
+        sizes[4] = 1;
+
+
+        for (uint256 i = 0; i < sizes.length; i++) {
+            PDPService.Cid memory testCid = PDPService.Cid(abi.encodePacked("test", i));
+            PDPService.RootData[] memory rootDataArray = new PDPService.RootData[](1);
+            rootDataArray[0] = PDPService.RootData(testCid, sizes[i] * pdpService.CHUNK_SIZE());
+            pdpService.addRoot(testSetId, rootDataArray);
+        }
+        assertEq(pdpService.findRootId(testSetId, 0), 3, "Should find root 3 at position 0");
+        assertEq(pdpService.findRootId(testSetId, 1), 4, "Should find root 4 at position 1");
+    }
+}
+
+contract CLZInternalTestPDPService is PDPService {
+    constructor(uint256 _challengeFinality) PDPService(_challengeFinality) {}
+
+    function testClz(uint256 n) public view returns (uint256) {
+        return clz(n);
+    }
+}
+
+contract ClzTest is Test {
+    CLZInternalTestPDPService pdpService;
+
+    function setUp() public {
+        pdpService = new CLZInternalTestPDPService(2);
+    }
+
+    function testClz() public {
+        assertEq(pdpService.testClz(8), 252, "clz(8) should be 252");
+        assertEq(pdpService.testClz(5), 253, "clz(5) should be 253");
+        assertEq(pdpService.testClz(0), 256, "clz(8) should be 252");
+
+    }
 }
