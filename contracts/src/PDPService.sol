@@ -180,7 +180,10 @@ contract PDPService {
     // removeRoot removes a root from a proof set. Must be called by the contract owner.
     function removeRoot(uint256 setId, uint256 rootId) public {
         require(proofSetOwner[setId] == msg.sender, "Only the owner can remove roots");
-        // TODO: implement me
+        require(proofSetLive(setId), "Proof set not live");
+
+
+
     }
 
     // findRoot returns the root id for a given chunk index
@@ -259,6 +262,18 @@ contract PDPService {
             sum += sumTreeSizes[setId][j];
         }
         sumTreeSizes[setId][nextRootId[setId]] = sum;        
+    }
+
+    // Perform sumtree removal
+    //
+    function sumTreeRemove(uint256 setId, uint32 index) internal {
+        uint32 top = uint32(256 - clz(nextRootId[setId]));
+        uint32 h = heightFromIndex(index);
+        uint256 delta = sumTreeSizes[setId][index];
+        for (uint32 i = h; i <= top; i++) {
+            sumTreeSizes[setId][index] -= delta; 
+            index += 1 << i;
+        }
     }
 
     // Return height of sumtree node at given index
