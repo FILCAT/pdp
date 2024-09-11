@@ -175,12 +175,15 @@ contract PDPService {
     }
 
     // removeRoot removes a root from a proof set. Must be called by the proof set owner.
-    function removeRoot(uint256 setId, uint256 rootId) public {
+    function removeRoot(uint256 setId, uint256 rootId) public returns (uint256) {
         require(proofSetOwner[setId] == msg.sender, "Only the owner can remove roots");
         require(proofSetLive(setId), "Proof set not live");
-
-
-
+        uint256 delta = rootSizes[setId][rootId];
+        sumTreeRemove(setId, rootId, delta);
+        delete rootSizes[setId][rootId];
+        delete rootCids[setId][rootId];
+        proofSetSize[setId] -= delta;
+        return delta;
     }
 
     // findRoot returns the root id for a given leaf index and the leaf's offset within
@@ -275,13 +278,17 @@ contract PDPService {
 
     // Perform sumtree removal
     //
-    function sumTreeRemove(uint256 setId, uint32 index) internal {
-        uint32 top = uint32(256 - clz(nextRootId[setId]));
-        uint32 h = heightFromIndex(index);
-        uint256 delta = sumTreeSizes[setId][index];
-        for (uint32 i = h; i <= top; i++) {
-            sumTreeSizes[setId][index] -= delta; 
-            index += 1 << i;
+    function sumTreeRemove(uint256 setId, uint256 index, uint256 delta) internal {
+        uint256 top = uint256(256 - clz(nextRootId[setId]));
+        uint256 h = uint256(heightFromIndex(uint32(index)));
+
+        // Deletion traversal either terminates at 
+        // 1) the top of the tree or
+        // 2) the highest node right of the removal index
+        while (h <= top && index < nextRootId[setId]) {
+            sumTreeSizes[setId][index] -= delta;
+            index += 1 << h;
+            h = heightFromIndex(uint32(index));
         }
     }
 
