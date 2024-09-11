@@ -182,4 +182,78 @@ contract SumTreeAddTest is Test {
         // Assert final proof set leaf count
         assertEq(pdpService.getProofSetLeafCount(testSetId), 820, "Incorrect final proof set leaf count");
     }
+
+    function testFindRootId() public {
+        // Set up the same array as in testSumTreeAdd
+        uint256[] memory sizes = new uint256[](8);
+        sizes[0] = 200;
+        sizes[1] = 100;
+        sizes[2] = 0;
+        sizes[3] = 30;
+        sizes[4] = 50;
+        sizes[5] = 0;
+        sizes[6] = 400;
+        sizes[7] = 40;
+
+        // Add roots to the proof set
+        for (uint256 i = 0; i < sizes.length; i++) {
+            PDPService.Cid memory testCid = PDPService.Cid(abi.encodePacked("test", i));
+            PDPService.RootData[] memory rootDataArray = new PDPService.RootData[](1);
+            rootDataArray[0] = PDPService.RootData(testCid, sizes[i] * pdpService.LEAF_SIZE());
+            pdpService.addRoots(testSetId, rootDataArray);
+        }
+
+        // Test findRootId for various positions
+        assertFindRootAndOffset(testSetId, 0, 0, 0);
+        assertFindRootAndOffset(testSetId, 199, 0, 199);
+        assertFindRootAndOffset(testSetId, 200, 1, 0);
+        assertFindRootAndOffset(testSetId, 299, 1, 99);
+        assertFindRootAndOffset(testSetId, 300, 3, 0);
+        assertFindRootAndOffset(testSetId, 329, 3, 29);
+        assertFindRootAndOffset(testSetId, 330, 4, 0);
+        assertFindRootAndOffset(testSetId, 379, 4, 49);
+        assertFindRootAndOffset(testSetId, 380, 6, 0);
+        assertFindRootAndOffset(testSetId, 779, 6, 399);
+        assertFindRootAndOffset(testSetId, 780, 7, 0);
+        assertFindRootAndOffset(testSetId, 819, 7, 39);
+
+        // Test edge cases
+        vm.expectRevert("Leaf index out of bounds");
+        pdpService.findRootId(testSetId, 820);
+
+        vm.expectRevert("Leaf index out of bounds");
+        pdpService.findRootId(testSetId, 1000);
+    }
+
+    error TestingFindError(uint256 expected, uint256 actual, string msg);
+
+    function assertFindRootAndOffset(uint256 setId, uint256 searchIndex, uint256 expectRootId, uint256 expectOffset) internal view {
+        (uint256 rootId, uint256 offset) = pdpService.findRootId(setId, searchIndex);
+        if (rootId != expectRootId) {
+            revert TestingFindError(expectRootId, rootId, "unexpected root");
+        }
+        if (offset != expectOffset) {
+            revert TestingFindError(expectOffset, offset, "unexpected offset");
+        }
+    }
+
+    function testFindRootIdTraverseOffTheEdgeAndBack() public {
+        uint256[] memory sizes = new uint256[](5);
+        sizes[0] = 0;
+        sizes[1] = 0;
+        sizes[2] = 0;
+        sizes[3] = 1;
+        sizes[4] = 1;
+
+
+        for (uint256 i = 0; i < sizes.length; i++) {
+            PDPService.Cid memory testCid = PDPService.Cid(abi.encodePacked("test", i));
+            PDPService.RootData[] memory rootDataArray = new PDPService.RootData[](1);
+            rootDataArray[0] = PDPService.RootData(testCid, sizes[i] * pdpService.LEAF_SIZE());
+            pdpService.addRoots(testSetId, rootDataArray);
+        }
+
+        assertFindRootAndOffset(testSetId, 0, 3, 0);
+        assertFindRootAndOffset(testSetId, 1, 4, 0);
+    }
 }

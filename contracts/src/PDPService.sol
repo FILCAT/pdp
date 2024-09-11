@@ -5,7 +5,7 @@ import {BitOps} from "../src/BitOps.sol";
 
 contract PDPService {
     // Constants
-    uint256 public constant LEAF_SIZE = 256;
+    uint256 public constant LEAF_SIZE = 32;
 
     // Types
     // TODO PERF: https://github.com/FILCAT/pdp/issues/16#issuecomment-2329836995 
@@ -174,11 +174,52 @@ contract PDPService {
         return rootId;
     }
 
-    // Removes a root from a proof set. Must be called by the contract owner.
+    // removeRoot removes a root from a proof set. Must be called by the proof set owner.
     function removeRoot(uint256 setId, uint256 rootId) public {
         require(proofSetOwner[setId] == msg.sender, "Only the owner can remove roots");
         // TODO: implement me
     }
+
+    // findRoot returns the root id for a given leaf index and the leaf's offset within
+    // the rootId.
+    // 
+    // It does this by running a binary search over the logical array
+    // To do this efficiently we walk the sumtree.
+    function findRootId(uint256 setId, uint256 leafIndex) public view returns (uint256, uint256) { 
+        require(leafIndex < proofSetLeafCount[setId], "Leaf index out of bounds");
+        // The top of the sumtree is the largest power of 2 less than the number of roots
+        uint256 top = 256 - BitOps.clz(nextRootId[setId]);
+        uint256 searchPtr = (1 << top) - 1;
+        uint256 acc = 0;
+
+        // Binary search until we find the index of the sumtree leaf covering the index range
+        uint256 candidate;
+        for (uint256 h = top; h > 0; h--) {
+            // Search has taken us past the end of the sumtree
+            // Only option is to go left
+            if (searchPtr >= nextRootId[setId]) {
+                searchPtr -= 1 << (h - 1);
+                continue;
+            }
+
+            candidate = acc + sumTreeCounts[setId][searchPtr]; 
+            // Go right            
+            if (candidate <= leafIndex) { 
+                acc += sumTreeCounts[setId][searchPtr];
+                searchPtr += 1 << (h - 1);
+            } else {
+                // Go left
+                searchPtr -= 1 << (h - 1);
+            }
+        }
+        candidate = acc + sumTreeCounts[setId][searchPtr];
+        if (candidate <= leafIndex) {
+            // Choose right 
+            return (searchPtr + 1, leafIndex - candidate); 
+        } // Choose left
+        return (searchPtr, leafIndex - acc);
+    }
+
 
     // Verifies and records that the provider proved possession of the 
     // proof set Merkle roots at some epoch. The challenge seed is determined 
