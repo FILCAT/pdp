@@ -177,15 +177,25 @@ contract PDPService {
         return 0;
     }
 
-    // removeRoot removes a root from a proof set. Must be called by the contract owner.
-    function removeRoot(uint256 setId, uint256 rootId) public returns (uint256) {
+    // removeRoots removes a batch of roots from a proof set.  Must be called by the contract owner.
+    // returns the total removed leaf count
+    function removeRoots(uint256 setId, uint256[] calldata rootIds) public returns (uint256){
         require(proofSetOwner[setId] == msg.sender, "Only the owner can remove roots");
         require(proofSetLive(setId), "Proof set not live");
+        uint256 totalDelta = 0;
+        for (uint256 i = 0; i < rootIds.length; i++){
+            totalDelta += removeOneRoot(setId, rootIds[i]);
+        }
+        proofSetSize[setId] -= totalDelta;
+        return totalDelta;
+    }
+
+    // removeOneRoot removes a root from a proof set. 
+    function removeOneRoot(uint256 setId, uint256 rootId) internal returns (uint256) {
         uint256 delta = rootSizes[setId][rootId];
         sumTreeRemove(setId, rootId, delta);
         delete rootSizes[setId][rootId];
         delete rootCids[setId][rootId];
-        proofSetSize[setId] -= delta;
         return delta;
     }
 

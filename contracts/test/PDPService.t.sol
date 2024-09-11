@@ -172,11 +172,12 @@ contract SumTreeAddTest is Test {
             assertEq(pdpService.getRootCid(testSetId, i).data, testCid.data, "Root not added correctly");
         }
 
-        // Delete some
+        // Remove roots in batch
+        pdpService.removeRoots(testSetId, rootIdsToRemove);
         for (uint256 i = 0; i < rootIdsToRemove.length; i++) {
-            assertEq(pdpService.removeRoot(testSetId, rootIdsToRemove[i]), 1, "Unexpected removed leaf count");
             bytes memory zeroBytes;
             assertEq(pdpService.getRootCid(testSetId, rootIdsToRemove[i]).data, zeroBytes);
+            assertEq(pdpService.getRootSize(testSetId, rootIdsToRemove[i]), 0, "Root size should be 0");
         }
 
         // Assert that the sum tree size is correct
@@ -186,6 +187,22 @@ contract SumTreeAddTest is Test {
 
         // Assert final proof set size
         assertEq(pdpService.getProofSetSize(testSetId), 820, "Incorrect final proof set size");
+    }
+
+    function testBatchedRemoveRootsOnlyOwner() public {
+        uint256 setId = pdpService.createProofSet();
+        PDPService.Cid memory testCid = PDPService.Cid(abi.encodePacked("test"));
+        PDPService.RootData[] memory rootDataArray = new PDPService.RootData[](1);
+        rootDataArray[0] = PDPService.RootData(testCid, 100 * pdpService.CHUNK_SIZE());
+        pdpService.addRoot(setId, rootDataArray);
+
+        address nonOwner = address(0x1234);
+        uint256[] memory rootIdsToRemove = new uint256[](1);
+        rootIdsToRemove[0] = 0;
+
+        vm.prank(nonOwner);
+        vm.expectRevert("Only the owner can remove roots");
+        pdpService.removeRoots(setId, rootIdsToRemove);
     }
 
     function testFindRootId() public {
