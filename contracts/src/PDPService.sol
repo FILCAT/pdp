@@ -174,7 +174,7 @@ contract PDPService {
         return rootId;
     }
 
-    // removeRoot removes a root from a proof set. Must be called by the contract owner.
+    // removeRoot removes a root from a proof set. Must be called by the proof set owner.
     function removeRoot(uint256 setId, uint256 rootId) public {
         require(proofSetOwner[setId] == msg.sender, "Only the owner can remove roots");
         // TODO: implement me
