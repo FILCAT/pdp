@@ -15,67 +15,77 @@ pragma solidity ^0.8.20;
 library MerkleProof {
     /**
      * Returns true if a `leaf` can be proved to be a part of a Merkle tree
-     * defined by `root`. For this, a `proof` must be provided, containing
-     * sibling hashes on the branch from the leaf to the root of the tree. Each
-     * pair of leaves and each pair of pre-images are assumed to be sorted.
+     * defined by `root` at `position`. For this, a `proof` must be provided, containing
+     * sibling hashes on the branch from the leaf to the root of the tree.
      *
      * This version handles proofs in memory.
      */
-    function verify(bytes32[] memory proof, bytes32 root, bytes32 leaf) internal view returns (bool) {
-        return processProof(proof, leaf) == root;
+    function verify(bytes32[] memory proof, bytes32 root, bytes32 leaf, uint256 position) internal view returns (bool) {
+        return processProofMemory(proof, leaf, position) == root;
     }
 
     /**
      * Returns the rebuilt hash obtained by traversing a Merkle tree up
-     * from `leaf` using `proof`. A `proof` is valid if and only if the rebuilt
-     * hash matches the root of the tree. When processing the proof, the pairs
-     * of leafs & pre-images are assumed to be sorted.
+     * from `leaf` at `position` using `proof`. A `proof` is valid if and only if the rebuilt
+     * hash matches the root of the tree.
      *
      * This version handles proofs in memory.
      */
-    function processProof(bytes32[] memory proof, bytes32 leaf) internal view returns (bytes32) {
+    function processProofMemory(bytes32[] memory proof, bytes32 leaf, uint256 position) internal view returns (bytes32) {
         bytes32 computedHash = leaf;
         for (uint256 i = 0; i < proof.length; i++) {
-            computedHash = Hashes.commutativeHash(computedHash, proof[i]);
+            // If position is even, the leaf/node is on the left and sibling is on the right.
+            bytes32 sibling = proof[i];
+            if (position % 2 == 0) {
+                computedHash = Hashes.orderedHash(computedHash, sibling);
+            } else {
+                computedHash = Hashes.orderedHash(sibling, computedHash);
+            }
+            position /= 2;
         }
         return computedHash;
     }
 
     /**
      * Returns true if a `leaf` can be proved to be a part of a Merkle tree
-     * defined by `root`. For this, a `proof` must be provided, containing
-     * sibling hashes on the branch from the leaf to the root of the tree. Each
-     * pair of leaves and each pair of pre-images are assumed to be sorted.
+     * defined by `root` at `position`. For this, a `proof` must be provided, containing
+     * sibling hashes on the branch from the leaf to the root of the tree.
      *
      * This version handles proofs in calldata.
      */
-    function verifyCalldata(bytes32[] calldata proof, bytes32 root, bytes32 leaf) internal view returns (bool) {
-        return processProofCalldata(proof, leaf) == root;
+    function verifyCalldata(bytes32[] calldata proof, bytes32 root, bytes32 leaf, uint256 position) internal view returns (bool) {
+        return processProofCalldata(proof, leaf, position) == root;
     }
 
     /**
      * Returns the rebuilt hash obtained by traversing a Merkle tree up
-     * from `leaf` using `proof`. A `proof` is valid if and only if the rebuilt
-     * hash matches the root of the tree. When processing the proof, the pairs
-     * of leafs & pre-images are assumed to be sorted.
+     * from `leaf` at `position` using `proof`. A `proof` is valid if and only if the rebuilt
+     * hash matches the root of the tree.
      *
      * This version handles proofs in calldata.
      */
-    function processProofCalldata(bytes32[] calldata proof, bytes32 leaf) internal view returns (bytes32) {
+    function processProofCalldata(bytes32[] calldata proof, bytes32 leaf, uint256 position) internal view returns (bytes32) {
         bytes32 computedHash = leaf;
         for (uint256 i = 0; i < proof.length; i++) {
-            computedHash = Hashes.commutativeHash(computedHash, proof[i]);
+            // If position is even, the leaf/node is on the left and sibling is on the right.
+            bytes32 sibling = proof[i];
+            if (position % 2 == 0) {
+                computedHash = Hashes.orderedHash(computedHash, sibling);
+            } else {
+                computedHash = Hashes.orderedHash(sibling, computedHash);
+            }
+            position /= 2;
         }
         return computedHash;
     }
 }
 
-
 library Hashes {
-    /** Commutative hash of pair of bytes32. */
-    function commutativeHash(bytes32 a, bytes32 b) internal view returns (bytes32) {
-        return a < b ? _efficientSHA256(a, b) : _efficientSHA256(b, a);
+    /** Order-dependent hash of pair of bytes32. */
+    function orderedHash(bytes32 a, bytes32 b) internal view returns (bytes32) {
+        return _efficientSHA256(a, b);
     }
+
 
     /** Implementation of sha256(abi.encode(a, b)) that doesn't allocate or expand memory. */
     function _efficientSHA256(bytes32 a, bytes32 b) private view returns (bytes32 value) {
