@@ -136,17 +136,18 @@ contract SumTreeAddTest is Test {
         assertEq(pdpService.getProofSetSize(testSetId), 40, "Incorrect final proof set size");
     }
 
-    function testSumTreeAdd() public {
+    function testSumTree() public {
         uint256[] memory sizes = new uint256[](8);
         sizes[0] = 200;
         sizes[1] = 100;
-        sizes[2] = 0;
+        sizes[2] = 1; // Remove
         sizes[3] = 30;
         sizes[4] = 50;
-        sizes[5] = 0;
+        sizes[5] = 1; // Remove
         sizes[6] = 400;
         sizes[7] = 40;
 
+        // Correct sum tree values assuming that rootIdsToRemove are deleted
         uint256[] memory expectedSumTreeSizes = new uint256[](8);
         expectedSumTreeSizes[0] = 200;
         expectedSumTreeSizes[1] = 300;
@@ -157,16 +158,29 @@ contract SumTreeAddTest is Test {
         expectedSumTreeSizes[6] = 400;
         expectedSumTreeSizes[7] = 820;
 
+        uint256[] memory rootIdsToRemove = new uint256[](2);
+        rootIdsToRemove[0] = 2;
+        rootIdsToRemove[1] = 5;
+
+        // Add all
         for (uint256 i = 0; i < sizes.length; i++) {
             PDPService.Cid memory testCid = PDPService.Cid(abi.encodePacked("test", i));
             PDPService.RootData[] memory rootDataArray = new PDPService.RootData[](1);
             rootDataArray[0] = PDPService.RootData(testCid, sizes[i] * pdpService.CHUNK_SIZE());
             pdpService.addRoot(testSetId, rootDataArray);
-
-            // Assert that the root was added
+            // Assert the root was added correctly
             assertEq(pdpService.getRootCid(testSetId, i).data, testCid.data, "Root not added correctly");
+        }
 
-            // Assert that the sum tree size is correct
+        // Delete some
+        for (uint256 i = 0; i < rootIdsToRemove.length; i++) {
+            assertEq(pdpService.removeRoot(testSetId, rootIdsToRemove[i]), 1, "Unexpected removed leaf count");
+            bytes memory zeroBytes;
+            assertEq(pdpService.getRootCid(testSetId, rootIdsToRemove[i]).data, zeroBytes);
+        }
+
+        // Assert that the sum tree size is correct
+        for (uint256 i = 0; i < sizes.length; i++) {
             assertEq(pdpService.getSumTreeSize(testSetId, i), expectedSumTreeSizes[i], "Incorrect sum tree size");
         }
 
