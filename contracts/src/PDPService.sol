@@ -183,15 +183,15 @@ contract PDPService {
         for (uint256 i = 0; i < rootIds.length; i++){
             totalDelta += removeOneRoot(setId, rootIds[i]);
         }
-        proofSetSize[setId] -= totalDelta;
+        proofSetLeafCount[setId] -= totalDelta;
         return totalDelta;
     }
 
     // removeOneRoot removes a root from a proof set. 
     function removeOneRoot(uint256 setId, uint256 rootId) internal returns (uint256) {
-        uint256 delta = rootSizes[setId][rootId];
+        uint256 delta = rootLeafCounts[setId][rootId];
         sumTreeRemove(setId, rootId, delta);
-        delete rootSizes[setId][rootId];
+        delete rootLeafCounts[setId][rootId];
         delete rootCids[setId][rootId];
         return delta;
     }
@@ -289,16 +289,16 @@ contract PDPService {
     // Perform sumtree removal
     //
     function sumTreeRemove(uint256 setId, uint256 index, uint256 delta) internal {
-        uint256 top = uint256(256 - clz(nextRootId[setId]));
-        uint256 h = uint256(heightFromIndex(uint32(index)));
+        uint256 top = uint256(256 - BitOps.clz(nextRootId[setId]));
+        uint256 h = uint256(heightFromIndex(index));
 
         // Deletion traversal either terminates at 
         // 1) the top of the tree or
         // 2) the highest node right of the removal index
         while (h <= top && index < nextRootId[setId]) {
-            sumTreeSizes[setId][index] -= delta;
+            sumTreeCounts[setId][index] -= delta;
             index += 1 << h;
-            h = heightFromIndex(uint32(index));
+            h = heightFromIndex(index);
         }
     }
 
