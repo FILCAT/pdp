@@ -38,4 +38,35 @@ contract BitOpsTest is Test {
         assertEq(BitOps.clz(0x8FFFFFFF), 56*4, "CLZ of 0x8FFFFFFF should be 56*4");
         assertEq(BitOps.clz(0x8000000000000000), 48*4, "CLZ of 0x8000000000000000 should be 48*4");
     }
+
+    function testCtzZero() pure public {
+        uint256 result = BitOps.ctz(0);
+        assertEq(result, 256, "CTZ of 0 should be 256");
+    }
+
+    function testCtz1LShift255() pure public {
+        uint256 result = BitOps.ctz(1<<254);
+        assertEq(result, 254, "CTZ of 2^254 should be 254");
+    }
+
+    function testCtzInputExceedsMaxInt256() public {
+        // Setup
+        uint256 maxInt256 = uint256(type(int256).max);
+        uint256 exceedingValue = maxInt256 + 1;
+
+        // Expect the call to revert
+        vm.expectRevert("Input exceeds maximum int256 value");
+        
+        // Call ctz with a value exceeding max int256
+        BitOps.ctz(exceedingValue);
+    }
+
+    function testCtzSelectValues() pure public {
+        assertEq(BitOps.ctz(0x000F), 0, "CTZ of 0x000F should be 0");
+        assertEq(BitOps.ctz(0xFF00), 8, "CTZ of 0xFF00 should be 2");
+        assertEq(BitOps.ctz(0x8000), 15, "CTZ of 0x8000 should be 15");
+        assertEq(BitOps.ctz(0x80000000), 31, "CLZ of 0x80000000 should be 56*4");
+    }
+
+
 }

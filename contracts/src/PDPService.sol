@@ -1,15 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
+import {BitOps} from "../src/BitOps.sol";
 
 contract PDPService {
     // Constants
     uint256 public constant LEAF_SIZE = 256;
-    int32 constant MASK16 = 0x0000FFFF;
-    int32 constant MASK8 = 0x00FF00FF;
-    int32 constant MASK4 = 0x0F0F0F0F;
-    int32 constant MASK2 = 0x33333333;
-    int32 constant MASK1 = 0x55555555;
 
     // Types
     // TODO PERF: https://github.com/FILCAT/pdp/issues/16#issuecomment-2329836995 
@@ -221,13 +217,13 @@ contract PDPService {
     // Perform sumtree addition 
     // 
     function sumTreeAdd(uint256 setId, uint256 count, uint256 rootId) internal {
-        uint32 index = uint32(rootId);
-        uint32 h = heightFromIndex(index);
+        uint256 index = rootId;
+        uint256 h = heightFromIndex(index);
         
         uint256 sum = count;
         // Sum BaseArray[j - 2^i] for i in [0, h)
-        for (uint32 i = 0; i < h; i++) {
-            uint32 j = index - uint32(1 << i);
+        for (uint256 i = 0; i < h; i++) {
+            uint256 j = index - (1 << i);
             sum += sumTreeCounts[setId][j];
         }
         sumTreeCounts[setId][rootId] = sum;        
@@ -235,27 +231,8 @@ contract PDPService {
 
     // Return height of sumtree node at given index
     // Calculated by taking the trailing zeros of 1 plus the index
-    function heightFromIndex(uint32 index) internal pure returns (uint8) {
-        uint8 h = 31; // Operating on index + 1 means we never have index == 0 so there's always a leading 1
-        int32 v = -int32(index + 1);
-        v = v & int32(index+1);
-        if (v & MASK16 != 0) {
-            h -= 16;
-        }
-        if (v & MASK8 != 0) {
-            h -= 8;
-        }
-        if (v & MASK4 != 0) {
-            h -= 4;
-        }
-        if (v & MASK2 != 0) {
-            h -= 2;
-        }
-        if (v & MASK1 != 0) {
-            h -= 1;
-        }
-
-        return h;
+    function heightFromIndex(uint256 index) internal pure returns (uint256) {
+        return BitOps.ctz(index + 1);
     }
 
 }

@@ -73,7 +73,7 @@ contract PDPServiceProofSetCreateDeleteTest is Test {
 contract SumTreeInternalTestPDPService is PDPService {
     constructor(uint256 _challengeFinality) PDPService(_challengeFinality) {}
 
-    function testHeightFromIndex(uint32 index) public view returns (uint8) {
+    function testHeightFromIndex(uint256 index) public view returns (uint256) {
         return heightFromIndex(index);
     }
 
@@ -97,8 +97,8 @@ contract SumTreeHeightTest is Test {
             1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 6, 
             1, 2, 1, 3, 1, 2, 1, 4, 1
         ];
-        for (uint32 i = 0; i < 105; i++) {
-            assertEq(oeisA001511[i], pdpService.testHeightFromIndex(i) + 1, "Heights from index 0 to 104 should match OEIS A001511");
+        for (uint256 i = 0; i < 105; i++) {
+            assertEq(uint256(oeisA001511[i]), pdpService.testHeightFromIndex(i) + 1, "Heights from index 0 to 104 should match OEIS A001511");
         }
     }
 }
