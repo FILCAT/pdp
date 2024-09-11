@@ -5,7 +5,7 @@ import {BitOps} from "../src/BitOps.sol";
 
 contract PDPService {
     // Constants
-    uint256 public constant LEAF_SIZE = 256;
+    uint256 public constant LEAF_SIZE = 32;
 
     // Types
     // TODO PERF: https://github.com/FILCAT/pdp/issues/16#issuecomment-2329836995 
@@ -180,17 +180,19 @@ contract PDPService {
         // TODO: implement me
     }
 
-    // findRoot returns the root id for a given chunk index
+    // findRoot returns the root id for a given leaf index and the leaf's offset within
+    // the rootId.
+    // 
     // It does this by running a binary search over the logical array
-    // To do this efficiently we walk the sumtree 
-    function findRootId(uint256 setId, uint256 leafIndex) public view returns (uint256) { 
+    // To do this efficiently we walk the sumtree.
+    function findRootId(uint256 setId, uint256 leafIndex) public view returns (uint256, uint256) { 
         require(leafIndex < proofSetLeafCount[setId], "Leaf index out of bounds");
         // The top of the sumtree is the largest power of 2 less than the number of roots
         uint256 top = 256 - BitOps.clz(nextRootId[setId]);
         uint256 searchPtr = (1 << top) - 1;
         uint256 acc = 0;
 
-        //Binary search until we find the index of the sumtree leaf covering the index range
+        // Binary search until we find the index of the sumtree leaf covering the index range
         uint256 candidate;
         for (uint256 h = top; h > 0; h--) {
             // Search has taken us past the end of the sumtree
@@ -213,10 +215,9 @@ contract PDPService {
         candidate = acc + sumTreeCounts[setId][searchPtr];
         if (candidate <= leafIndex) {
             // Choose right 
-            searchPtr += 1;
-        } // else choose left
-
-        return searchPtr;
+            return (searchPtr + 1, leafIndex - candidate); 
+        } // Choose left
+        return (searchPtr, leafIndex - acc);
     }
 
 

@@ -204,18 +204,18 @@ contract SumTreeAddTest is Test {
         }
 
         // Test findRootId for various positions
-        assertEq(pdpService.findRootId(testSetId, 0), 0, "Should find root 0 at root id 0");
-        assertEq(pdpService.findRootId(testSetId, 199), 0, "Should find root 0 at position 199");
-        assertEq(pdpService.findRootId(testSetId, 200), 1, "Should find root 1 at position 200");
-        assertEq(pdpService.findRootId(testSetId, 299), 1, "Should find root 1 at position 299");
-        assertEq(pdpService.findRootId(testSetId, 300), 3, "Should find root 3 at position 300");
-        assertEq(pdpService.findRootId(testSetId, 329), 3, "Should find root 3 at position 329");
-        assertEq(pdpService.findRootId(testSetId, 330), 4, "Should find root 4 at position 330");
-        assertEq(pdpService.findRootId(testSetId, 379), 4, "Should find root 4 at position 379");
-        assertEq(pdpService.findRootId(testSetId, 380), 6, "Should find root 6 at position 380");
-        assertEq(pdpService.findRootId(testSetId, 779), 6, "Should find root 6 at position 779");
-        assertEq(pdpService.findRootId(testSetId, 780), 7, "Should find root 7 at position 780");
-        assertEq(pdpService.findRootId(testSetId, 819), 7, "Should find root 7 at position 819");
+        assertFindRootAndOffset(testSetId, 0, 0, 0);
+        assertFindRootAndOffset(testSetId, 199, 0, 199);
+        assertFindRootAndOffset(testSetId, 200, 1, 0);
+        assertFindRootAndOffset(testSetId, 299, 1, 99);
+        assertFindRootAndOffset(testSetId, 300, 3, 0);
+        assertFindRootAndOffset(testSetId, 329, 3, 29);
+        assertFindRootAndOffset(testSetId, 330, 4, 0);
+        assertFindRootAndOffset(testSetId, 379, 4, 49);
+        assertFindRootAndOffset(testSetId, 380, 6, 0);
+        assertFindRootAndOffset(testSetId, 779, 6, 399);
+        assertFindRootAndOffset(testSetId, 780, 7, 0);
+        assertFindRootAndOffset(testSetId, 819, 7, 39);
 
         // Test edge cases
         vm.expectRevert("Leaf index out of bounds");
@@ -223,6 +223,18 @@ contract SumTreeAddTest is Test {
 
         vm.expectRevert("Leaf index out of bounds");
         pdpService.findRootId(testSetId, 1000);
+    }
+
+    error TestingFindError(uint256 expected, uint256 actual, string msg);
+
+    function assertFindRootAndOffset(uint256 setId, uint256 searchIndex, uint256 expectRootId, uint256 expectOffset) internal view {
+        (uint256 rootId, uint256 offset) = pdpService.findRootId(setId, searchIndex);
+        if (rootId != expectRootId) {
+            revert TestingFindError(expectRootId, rootId, "unexpected root");
+        }
+        if (offset != expectOffset) {
+            revert TestingFindError(expectOffset, offset, "unexpected offset");
+        }
     }
 
     function testFindRootIdTraverseOffTheEdgeAndBack() public {
@@ -240,7 +252,8 @@ contract SumTreeAddTest is Test {
             rootDataArray[0] = PDPService.RootData(testCid, sizes[i] * pdpService.LEAF_SIZE());
             pdpService.addRoots(testSetId, rootDataArray);
         }
-        assertEq(pdpService.findRootId(testSetId, 0), 3, "Should find root 3 at position 0");
-        assertEq(pdpService.findRootId(testSetId, 1), 4, "Should find root 4 at position 1");
+
+        assertFindRootAndOffset(testSetId, 0, 3, 0);
+        assertFindRootAndOffset(testSetId, 1, 4, 0);
     }
 }
