@@ -161,9 +161,9 @@ contract PDPService {
         }
         // TODO: add this check after remove operation is implemented and we can easily
         // test 0 sizes without adding them directly.
-        // if (rawSize == 0) {
-        //     revert IndexedError(callIdx, "Size must be greater than 0");
-        // }
+        if (rawSize == 0) {
+            revert IndexedError(callIdx, "Size must be greater than 0");
+        }
 
         uint256 leafCount = rawSize / LEAF_SIZE;
         uint256 rootId = nextRootId[setId]++;
@@ -174,10 +174,26 @@ contract PDPService {
         return rootId;
     }
 
-    // removeRoot removes a root from a proof set. Must be called by the proof set owner.
-    function removeRoot(uint256 setId, uint256 rootId) public {
+    // removeRoots removes a batch of roots from a proof set.  Must be called by the proof set owner.
+    // returns the total removed leaf count
+    function removeRoots(uint256 setId, uint256[] calldata rootIds) public returns (uint256){
         require(proofSetOwner[setId] == msg.sender, "Only the owner can remove roots");
-        // TODO: implement me
+        require(proofSetLive(setId), "Proof set not live");
+        uint256 totalDelta = 0;
+        for (uint256 i = 0; i < rootIds.length; i++){
+            totalDelta += removeOneRoot(setId, rootIds[i]);
+        }
+        proofSetLeafCount[setId] -= totalDelta;
+        return totalDelta;
+    }
+
+    // removeOneRoot removes a root from a proof set. 
+    function removeOneRoot(uint256 setId, uint256 rootId) internal returns (uint256) {
+        uint256 delta = rootLeafCounts[setId][rootId];
+        sumTreeRemove(setId, rootId, delta);
+        delete rootLeafCounts[setId][rootId];
+        delete rootCids[setId][rootId];
+        return delta;
     }
 
     // findRoot returns the root id for a given leaf index and the leaf's offset within
@@ -268,6 +284,22 @@ contract PDPService {
             sum += sumTreeCounts[setId][j];
         }
         sumTreeCounts[setId][rootId] = sum;        
+    }
+
+    // Perform sumtree removal
+    //
+    function sumTreeRemove(uint256 setId, uint256 index, uint256 delta) internal {
+        uint256 top = uint256(256 - BitOps.clz(nextRootId[setId]));
+        uint256 h = uint256(heightFromIndex(index));
+
+        // Deletion traversal either terminates at 
+        // 1) the top of the tree or
+        // 2) the highest node right of the removal index
+        while (h <= top && index < nextRootId[setId]) {
+            sumTreeCounts[setId][index] -= delta;
+            index += 1 << h;
+            h = heightFromIndex(index);
+        }
     }
 
     // Return height of sumtree node at given index
