@@ -145,8 +145,8 @@ contract SumTreeAddTest is Test {
         assertEq(actualCid.data, expectedCid.data, "Incorrect root CID");
     }
 
-    function testSumTree() public {
-        uint256[] memory counts = new uint256[](8);
+    function setUpTestingArray() public returns (uint256[] memory counts, uint256[] memory expectedSumTreeCounts) {
+        counts = new uint256[](8);
         counts[0] = 200;
         counts[1] = 100;
         counts[2] = 1; // Remove
@@ -157,7 +157,7 @@ contract SumTreeAddTest is Test {
         counts[7] = 40;
 
         // Correct sum tree values assuming that rootIdsToRemove are deleted
-        uint256[] memory expectedSumTreeCounts = new uint256[](8);
+        expectedSumTreeCounts = new uint256[](8);
         expectedSumTreeCounts[0] = 200;
         expectedSumTreeCounts[1] = 300;
         expectedSumTreeCounts[2] = 0;
@@ -189,7 +189,10 @@ contract SumTreeAddTest is Test {
             assertEq(pdpService.getRootCid(testSetId, rootIdsToRemove[i]).data, zeroBytes);
             assertEq(pdpService.getRootLeafCount(testSetId, rootIdsToRemove[i]), 0, "Root size should be 0");
         }
+    }
 
+    function testSumTree() public {
+        (uint256[] memory counts, uint256[] memory expectedSumTreeCounts) = setUpTestingArray();
         // Assert that the sum tree count is correct
         for (uint256 i = 0; i < counts.length; i++) {
             assertEq(pdpService.getSumTreeCounts(testSetId, i), expectedSumTreeCounts[i], "Incorrect sum tree size");
@@ -216,24 +219,7 @@ contract SumTreeAddTest is Test {
     }
 
     function testFindRootId() public {
-        // Set up the same array as in testSumTreeAdd
-        uint256[] memory sizes = new uint256[](8);
-        sizes[0] = 200;
-        sizes[1] = 100;
-        sizes[2] = 0;
-        sizes[3] = 30;
-        sizes[4] = 50;
-        sizes[5] = 0;
-        sizes[6] = 400;
-        sizes[7] = 40;
-
-        // Add roots to the proof set
-        for (uint256 i = 0; i < sizes.length; i++) {
-            PDPService.Cid memory testCid = PDPService.Cid(abi.encodePacked("test", i));
-            PDPService.RootData[] memory rootDataArray = new PDPService.RootData[](1);
-            rootDataArray[0] = PDPService.RootData(testCid, sizes[i] * pdpService.LEAF_SIZE());
-            pdpService.addRoots(testSetId, rootDataArray);
-        }
+        setUpTestingArray();
 
         // Test findRootId for various positions
         assertFindRootAndOffset(testSetId, 0, 0, 0);
@@ -271,12 +257,16 @@ contract SumTreeAddTest is Test {
 
     function testFindRootIdTraverseOffTheEdgeAndBack() public {
         uint256[] memory sizes = new uint256[](5);
-        sizes[0] = 0;
-        sizes[1] = 0;
-        sizes[2] = 0;
+        sizes[0] = 1; // Remove
+        sizes[1] = 1; // Remove 
+        sizes[2] = 1; // Remove
         sizes[3] = 1;
         sizes[4] = 1;
 
+        uint256[] memory rootIdsToRemove = new uint256[](3);
+        rootIdsToRemove[0] = 0;
+        rootIdsToRemove[1] = 1;
+        rootIdsToRemove[2] = 2;
 
         for (uint256 i = 0; i < sizes.length; i++) {
             PDPService.Cid memory testCid = PDPService.Cid(abi.encodePacked("test", i));
@@ -284,6 +274,7 @@ contract SumTreeAddTest is Test {
             rootDataArray[0] = PDPService.RootData(testCid, sizes[i] * pdpService.LEAF_SIZE());
             pdpService.addRoots(testSetId, rootDataArray);
         }
+        pdpService.removeRoots(testSetId, rootIdsToRemove);
 
         assertFindRootAndOffset(testSetId, 0, 3, 0);
         assertFindRootAndOffset(testSetId, 1, 4, 0);

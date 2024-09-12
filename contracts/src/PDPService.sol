@@ -161,9 +161,9 @@ contract PDPService {
         }
         // TODO: add this check after remove operation is implemented and we can easily
         // test 0 sizes without adding them directly.
-        // if (rawSize == 0) {
-        //     revert IndexedError(callIdx, "Size must be greater than 0");
-        // }
+        if (rawSize == 0) {
+            revert IndexedError(callIdx, "Size must be greater than 0");
+        }
 
         uint256 leafCount = rawSize / LEAF_SIZE;
         uint256 rootId = nextRootId[setId]++;
