@@ -64,6 +64,25 @@ contract MerkleProofTest is Test {
         }
     }
 
+    // Tests that the merkle root of a tree committing to known data (all zeros) matches the
+    // externally-known Filecoin piece commitment for the same data.
+    // Note that this is only testing a balanced tree (power-of-two payload).
+    function testFilecoinCommPEquivalance() public view {
+        // Known value for CommP of a 2KiB zero payload copied from built-in actors code.
+        uint8[32] memory zeroCommP2KiB = [
+            252, 126, 146, 130, 150, 229, 22, 250, 173, 233, 134, 178, 143, 146, 212, 74, 79, 36, 185,
+            53, 72, 82, 35, 55, 106, 121, 144, 39, 188, 24, 248, 51
+        ];
+
+        bytes32 expected = loadDigest(zeroCommP2KiB);
+
+        // Build payload of of 2KiB of zeros, packed into bytes32 words
+        bytes32[] memory payload = new bytes32[](2048 / 32);
+
+        bytes32[][] memory tree = buildMerkleTree(payload);
+        assertEq(tree[0][0], expected);
+    }
+
     ///// Helper functions /////
 
     function generateLeaves(uint256 count) internal pure returns (bytes32[] memory) {
@@ -128,6 +147,15 @@ contract MerkleProofTest is Test {
             index /= 2; // Move to the parent node
         }
         return proof;
+    }
+
+    // Loads a bytes32 hash digest from an array of 32 1-byte values.
+    function loadDigest(uint8[32] memory b) public pure returns (bytes32) {
+        bytes32 result;
+        for (uint i = 0; i < 32; i++) {
+            result |= bytes32(uint256(b[i]) << (8 * (31 - i)));
+        }
+        return result;
     }
 
     function printTree(bytes32[][] memory tree) internal pure {
