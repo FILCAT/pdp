@@ -44,7 +44,6 @@ contract MerkleProofTest is Test {
         }
     }
 
-
     function testVerifyTreesManyLeaves() public view {
         for (uint256 width = 4; width < 60; width++) {
             bytes32[] memory leaves = generateLeaves(width);
@@ -166,10 +165,11 @@ contract HashesTest is Test {
         assertEq(result, expected, "Hashes.commutativeHash should return the expected hash");
     }
 
-    // Implements commutative SHA256 hash of pairs via the standard sha256(abi.encode(a, b)).
+    // Implements SHA254 hash of pairs via the standard sha256(abi.encode(a, b)).
     function expectedHash(bytes32 a, bytes32 b) internal pure returns (bytes32) {
         bytes memory payload = abi.encodePacked(a, b);
-        return sha256(payload);
+        bytes32 digest = sha256(payload);
+        digest = bytes32((uint256(digest) & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF3F));
+        return digest;
     }
-
 }
