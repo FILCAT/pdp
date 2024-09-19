@@ -81,14 +81,19 @@ library MerkleProof {
 }
 
 library Hashes {
+    // "The Sha254 functions are identical to Sha256 except that the last two bits of the Sha256 256-bit digest are zeroed out."
+    // The bytes of uint256 are arranged in big-endian order, MSB first in memory.
+    // The bits in each byte are arranged in little-endian order.
+    // Thus, the "last two bits" are the first two bits of the last byte.
+    uint256 constant SHA254_MASK = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF3F;
+
     /** Order-dependent hash of pair of bytes32. */
     function orderedHash(bytes32 a, bytes32 b) internal view returns (bytes32) {
-        return _efficientSHA256(a, b);
+        return _efficientSHA254(a, b);
     }
 
-
-    /** Implementation of sha256(abi.encode(a, b)) that doesn't allocate or expand memory. */
-    function _efficientSHA256(bytes32 a, bytes32 b) private view returns (bytes32 value) {
+    /** Implementation equivalent to using sha256(abi.encode(a, b)) that doesn't allocate or expand memory. */
+    function _efficientSHA254(bytes32 a, bytes32 b) private view returns (bytes32 value) {
         assembly ("memory-safe") {
             mstore(0x00, a)
             mstore(0x20, b)
@@ -99,6 +104,8 @@ library Hashes {
             }
             
             value := mload(0x00)
+            // SHA254 hash for compatibility with Filecoin piece commitments.
+            value := and(value, SHA254_MASK)
         }
     }
 }

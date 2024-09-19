@@ -44,7 +44,6 @@ contract MerkleProofTest is Test {
         }
     }
 
-
     function testVerifyTreesManyLeaves() public view {
         for (uint256 width = 4; width < 60; width++) {
             bytes32[] memory leaves = generateLeaves(width);
@@ -63,6 +62,25 @@ contract MerkleProofTest is Test {
                 }
             }
         }
+    }
+
+    // Tests that the merkle root of a tree committing to known data (all zeros) matches the
+    // externally-known Filecoin piece commitment for the same data.
+    // Note that this is only testing a balanced tree (power-of-two payload).
+    function testFilecoinCommPEquivalance() public view {
+        // Known value for CommP of a 2KiB zero payload copied from built-in actors code.
+        uint8[32] memory zeroCommP2KiB = [
+            252, 126, 146, 130, 150, 229, 22, 250, 173, 233, 134, 178, 143, 146, 212, 74, 79, 36, 185,
+            53, 72, 82, 35, 55, 106, 121, 144, 39, 188, 24, 248, 51
+        ];
+
+        bytes32 expected = loadDigest(zeroCommP2KiB);
+
+        // Build payload of of 2KiB of zeros, packed into bytes32 words
+        bytes32[] memory payload = new bytes32[](2048 / 32);
+
+        bytes32[][] memory tree = buildMerkleTree(payload);
+        assertEq(tree[0][0], expected);
     }
 
     ///// Helper functions /////
@@ -131,6 +149,15 @@ contract MerkleProofTest is Test {
         return proof;
     }
 
+    // Loads a bytes32 hash digest from an array of 32 1-byte values.
+    function loadDigest(uint8[32] memory b) public pure returns (bytes32) {
+        bytes32 result;
+        for (uint i = 0; i < 32; i++) {
+            result |= bytes32(uint256(b[i]) << (8 * (31 - i)));
+        }
+        return result;
+    }
+
     function printTree(bytes32[][] memory tree) internal pure {
         console.log("Tree:");
         for (uint i = 0; i < tree.length; i++) {
@@ -166,10 +193,11 @@ contract HashesTest is Test {
         assertEq(result, expected, "Hashes.commutativeHash should return the expected hash");
     }
 
-    // Implements commutative SHA256 hash of pairs via the standard sha256(abi.encode(a, b)).
+    // Implements SHA254 hash of pairs via the standard sha256(abi.encode(a, b)).
     function expectedHash(bytes32 a, bytes32 b) internal pure returns (bytes32) {
         bytes memory payload = abi.encodePacked(a, b);
-        return sha256(payload);
+        bytes32 digest = sha256(payload);
+        digest = bytes32((uint256(digest) & Hashes.SHA254_MASK));
+        return digest;
     }
-
 }
