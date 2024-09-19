@@ -197,7 +197,7 @@ contract HashesTest is Test {
     function expectedHash(bytes32 a, bytes32 b) internal pure returns (bytes32) {
         bytes memory payload = abi.encodePacked(a, b);
         bytes32 digest = sha256(payload);
-        digest = bytes32((uint256(digest) & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF3F));
+        digest = bytes32((uint256(digest) & Hashes.SHA254_MASK));
         return digest;
     }
 }
