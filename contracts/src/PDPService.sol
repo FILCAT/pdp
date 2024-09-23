@@ -2,16 +2,14 @@
 pragma solidity ^0.8.13;
 
 import {BitOps} from "../src/BitOps.sol";
+import {Cids} from "../src/Cids.sol";
+import {MerkleProof} from "../src/Proofs.sol";
 
 contract PDPService {
     // Constants
     uint256 public constant LEAF_SIZE = 32;
 
     // Types
-    // TODO PERF: https://github.com/FILCAT/pdp/issues/16#issuecomment-2329836995 
-    struct Cid {
-        bytes data;
-    }
 
     // State fields
 
@@ -29,6 +27,7 @@ contract PDPService {
         uint256 leafCount;
         address owner;
         nextRootID uint64;
+        nextChallengeEpoch: uint64
     }
     ** PDP service contract tracks many possible proof sets **
     []ProofSet proofsets
@@ -47,11 +46,12 @@ contract PDPService {
    
     // TODO PERF: https://github.com/FILCAT/pdp/issues/16#issuecomment-2329838769
     uint64 nextProofSetId;
-    mapping(uint256 => mapping(uint256 => Cid)) rootCids; 
+    mapping(uint256 => mapping(uint256 => Cids.Cid)) rootCids; 
     mapping(uint256 => mapping(uint256 => uint256)) rootLeafCounts;
     mapping(uint256 => mapping(uint256 => uint256)) sumTreeCounts;
     mapping(uint256 => uint256) nextRootId;
     mapping(uint256 => uint256) proofSetLeafCount;
+    mapping(uint256 => uint256) nextChallengeEpoch;
     // ownership of proof set is initialized upon creation to create message sender 
     // proofset owner has exclusive permission to add and remove roots and delete the proof set
     mapping(uint256 => address) proofSetOwner;
@@ -94,6 +94,12 @@ contract PDPService {
         return nextRootId[setId];
     }
 
+    // Returns the next challenge epoch for a proof set
+    function getNextChallengeEpoch(uint256 setId) public view returns (uint256) {
+        require(proofSetLive(setId), "Proof set not live");
+        return nextChallengeEpoch[setId];
+    }
+
     // Returns the owner of a proof set and the proposed owner if any
     function getProofSetOwner(uint256 setId) public view returns (address, address) {
         require(proofSetLive(setId), "Proof set not live");
@@ -101,7 +107,7 @@ contract PDPService {
     }
 
     // Returns the root CID for a given proof set and root ID
-    function getRootCid(uint256 setId, uint256 rootId) public view returns (Cid memory) {
+    function getRootCid(uint256 setId, uint256 rootId) public view returns (Cids.Cid memory) {
         require(proofSetLive(setId), "Proof set not live");
         return rootCids[setId][rootId];
     }
@@ -139,6 +145,7 @@ contract PDPService {
     function createProofSet() public returns (uint256) {
         uint256 setId = nextProofSetId++;
         proofSetLeafCount[setId] = 0;
+        nextChallengeEpoch[setId] = 0;  // Re-initialized when the first root is added.
         proofSetOwner[setId] = msg.sender;
         return setId;
     }
@@ -153,11 +160,12 @@ contract PDPService {
 
         proofSetLeafCount[setId] = 0;
         proofSetOwner[setId] = address(0);
+        nextChallengeEpoch[setId] = 0;
     }
 
     // Struct for tracking root data
     struct RootData {
-        Cid root;
+        Cids.Cid root;
         uint256 rawSize;
     }
 
@@ -165,10 +173,15 @@ contract PDPService {
         require(proofSetLive(setId), "Proof set not live");
         require(rootData.length > 0, "Must add at least one root");
         require(proofSetOwner[setId] == msg.sender, "Only the owner can add roots");
+        bool needsChallengeEpoch = nextChallengeEpoch[setId] == 0;
         uint256 firstAdded = nextRootId[setId];
 
         for (uint256 i = 0; i < rootData.length; i++) {
             addOneRoot(setId, i, rootData[i].root, rootData[i].rawSize);
+        }
+        // Initialise the first challenge epoch when the first data is added.
+        if (needsChallengeEpoch) {
+            nextChallengeEpoch[setId] = block.number + challengeFinality; 
         }
         return firstAdded;
     }
@@ -177,9 +190,9 @@ contract PDPService {
 
     // Appends a new root to the collection managed by a proof set.
     // Must be called by the proof set owner.  
-    function addOneRoot(uint256 setId, uint256 callIdx, Cid calldata root, uint256 rawSize) internal returns (uint256) {
+    function addOneRoot(uint256 setId, uint256 callIdx, Cids.Cid calldata root, uint256 rawSize) internal returns (uint256) {
         if (rawSize % LEAF_SIZE != 0) {
-            revert IndexedError(callIdx, "Size must be a multiple of 256");
+            revert IndexedError(callIdx, "Size must be a multiple of 32");
         }
         // TODO: add this check after remove operation is implemented and we can easily
         // test 0 sizes without adding them directly.
@@ -206,6 +219,11 @@ contract PDPService {
             totalDelta += removeOneRoot(setId, rootIds[i]);
         }
         proofSetLeafCount[setId] -= totalDelta;
+        // Clear next challenge epoch if the set is now empty.
+        // It will be re-set when new data is added.
+        if (proofSetLeafCount[setId] == 0) {
+            nextChallengeEpoch[setId] = 0;
+        }
         return totalDelta;
     }
 
@@ -272,13 +290,18 @@ contract PDPService {
     }
 
 
+    struct Proof {
+        bytes32 leaf;
+        uint256 leafOffset;
+        bytes32[] proof;
+    }
+
     // Verifies and records that the provider proved possession of the 
     // proof set Merkle roots at some epoch. The challenge seed is determined 
-    // by the previous proof of possession
-    // TODO: proof will probably be a new type not just bytes
-    function provePossession(uint256 setId, bytes calldata proof) public {
+    // by the epoch of the previous proof of possession.
+    // Note that this method is not restricted to the proof set owner.
+    function provePossession(uint256 setId, Proof[] calldata proofs) public {
         // TODO: implement me
-        // TODO: ownership check for proof validation? I don't think its necessary but maybe useful? 
     }
 
     /* Sum tree functions */

@@ -2,6 +2,7 @@ pragma solidity ^0.8.13;
 
 import {Test, console} from "forge-std/Test.sol";
 import {PDPService} from "../src/PDPService.sol";
+import {Cids} from "../src/Cids.sol";
 
 
 contract PDPServiceProofSetCreateDeleteTest is Test {
@@ -12,12 +13,19 @@ contract PDPServiceProofSetCreateDeleteTest is Test {
     }
 
     function testCreateProofSet() public {
+        Cids.Cid memory zeroRoot;
         uint256 setId = pdpService.createProofSet();
         assertEq(setId, 0, "First proof set ID should be 0");
         assertEq(pdpService.getProofSetLeafCount(setId), 0, "Proof set leaf count should be 0");
+
         (address owner, address proposedOwner) = pdpService.getProofSetOwner(setId);
         assertEq(owner, address(this), "Proof set owner should be the constructor sender");
         assertEq(proposedOwner, address(0), "Proof set proposed owner should be initialized to zero address");
+
+        assertEq(pdpService.getNextChallengeEpoch(setId), 0, "Proof set challenge epoch should be zero");
+        assertEq(pdpService.rootLive(setId, 0), false, "Proof set root should not be live");
+        assertEq(pdpService.getRootCid(setId, 0).data, zeroRoot.data, "Uninitialized root should be empty");
+        assertEq(pdpService.getRootLeafCount(setId, 0), 0, "Uninitialized root should have zero leaves");
     }
 
     function testDeleteProofSet() public {
@@ -61,6 +69,8 @@ contract PDPServiceProofSetCreateDeleteTest is Test {
         pdpService.getRootCid(setId, 0);
         vm.expectRevert("Proof set not live");
         pdpService.getRootLeafCount(setId, 0);
+        vm.expectRevert("Proof set not live");
+        pdpService.getNextChallengeEpoch(setId);
         vm.expectRevert("Proof set not live");
         pdpService.addRoots(setId, new PDPService.RootData[](0));
     }
@@ -128,6 +138,35 @@ contract PDPServiceOwnershipTest is Test {
     }
 }
 
+contract PDPServiceProofSetMutateTest is Test {
+    uint256 constant challengeFinalityDelay = 2;
+
+    PDPService pdpService;
+
+    function setUp() public {
+        pdpService = new PDPService(challengeFinalityDelay);
+    }
+
+    function testAddRoot() public {
+        uint256 setId = pdpService.createProofSet();
+        PDPService.RootData[] memory roots = new PDPService.RootData[](1);
+        roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 64);
+        uint256 rootId = pdpService.addRoots(setId, roots);
+        
+        uint256 leafCount = roots[0].rawSize / 32;
+        assertEq(pdpService.getProofSetLeafCount(setId), leafCount);
+        assertEq(pdpService.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
+
+        assertTrue(pdpService.rootLive(setId, rootId));
+        assertEq(pdpService.getRootCid(setId, rootId).data, roots[0].root.data);
+        assertEq(pdpService.getRootLeafCount(setId, rootId), leafCount);
+    }
+
+    // TODO: test bad inputs to addRoot
+    // TODO: test getters after adding multiple roots
+    // TODO: test removing roots, good and bad inputs, getters
+}
+
 contract SumTreeInternalTestPDPService is PDPService {
     constructor(uint256 _challengeFinality) PDPService(_challengeFinality) {}
 
@@ -190,7 +229,7 @@ contract SumTreeAddTest is Test {
         PDPService.RootData[] memory rootDataArray = new PDPService.RootData[](8);
 
         for (uint256 i = 0; i < counts.length; i++) {
-            PDPService.Cid memory testCid = PDPService.Cid(abi.encodePacked("test", i));
+            Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test", i));
             rootDataArray[i] = PDPService.RootData(testCid, counts[i] * pdpService.LEAF_SIZE());
         }
         pdpService.addRoots(testSetId, rootDataArray);
@@ -198,8 +237,8 @@ contract SumTreeAddTest is Test {
         assertEq(pdpService.getNextRootId(testSetId), 8, "Incorrect next root ID");
         assertEq(pdpService.getSumTreeCounts(testSetId, 7), 87, "Incorrect sum tree count");
         assertEq(pdpService.getRootLeafCount(testSetId, 7), 34, "Incorrect root leaf count");
-        PDPService.Cid memory expectedCid = PDPService.Cid(abi.encodePacked("test", uint256(3)));
-        PDPService.Cid memory actualCid = pdpService.getRootCid(testSetId, 3);
+        Cids.Cid memory expectedCid = Cids.Cid(abi.encodePacked("test", uint256(3)));
+        Cids.Cid memory actualCid = pdpService.getRootCid(testSetId, 3);
         assertEq(actualCid.data, expectedCid.data, "Incorrect root CID");
     }
 
@@ -231,7 +270,7 @@ contract SumTreeAddTest is Test {
 
         // Add all
         for (uint256 i = 0; i < counts.length; i++) {
-            PDPService.Cid memory testCid = PDPService.Cid(abi.encodePacked("test", i));
+            Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test", i));
             PDPService.RootData[] memory rootDataArray = new PDPService.RootData[](1);
             rootDataArray[0] = PDPService.RootData(testCid, counts[i] * pdpService.LEAF_SIZE());
             pdpService.addRoots(testSetId, rootDataArray);
@@ -262,7 +301,7 @@ contract SumTreeAddTest is Test {
 
     function testBatchedRemoveRootsOnlyOwner() public {
         uint256 setId = pdpService.createProofSet();
-        PDPService.Cid memory testCid = PDPService.Cid(abi.encodePacked("test"));
+        Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test"));
         PDPService.RootData[] memory rootDataArray = new PDPService.RootData[](1);
         rootDataArray[0] = PDPService.RootData(testCid, 100 * pdpService.LEAF_SIZE());
         pdpService.addRoots(setId, rootDataArray);
@@ -388,7 +427,7 @@ contract SumTreeAddTest is Test {
         rootIdsToRemove[2] = 2;
 
         for (uint256 i = 0; i < sizes.length; i++) {
-            PDPService.Cid memory testCid = PDPService.Cid(abi.encodePacked("test", i));
+            Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test", i));
             PDPService.RootData[] memory rootDataArray = new PDPService.RootData[](1);
             rootDataArray[0] = PDPService.RootData(testCid, sizes[i] * pdpService.LEAF_SIZE());
             pdpService.addRoots(testSetId, rootDataArray);
