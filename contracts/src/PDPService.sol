@@ -55,6 +55,7 @@ contract PDPService {
     // ownership of proof set is initialized upon creation to create message sender 
     // proofset owner has exclusive permission to add and remove roots and delete the proof set
     mapping(uint256 => address) proofSetOwner;
+    mapping(uint256 => address) proofSetProposedOwner;
 
     // Methods
     constructor(uint256 _challengeFinality) {
@@ -93,10 +94,10 @@ contract PDPService {
         return nextRootId[setId];
     }
 
-    // Returns the owner of a proof set
-    function getProofSetOwner(uint256 setId) public view returns (address) {
+    // Returns the owner of a proof set and the proposed owner if any
+    function getProofSetOwner(uint256 setId) public view returns (address, address) {
         require(proofSetLive(setId), "Proof set not live");
-        return proofSetOwner[setId];
+        return (proofSetOwner[setId], proofSetProposedOwner[setId]);
     }
 
     // Returns the root CID for a given proof set and root ID
@@ -110,6 +111,27 @@ contract PDPService {
         require(proofSetLive(setId), "Proof set not live");
         return rootLeafCounts[setId][rootId];
     }
+
+    // owner proposes new owner.  If the owner proposes themself delete any outstanding proposed owner
+    function proposeProofSetOwner(uint256 setId, address newOwner) public {
+        require(proofSetLive(setId), "Proof set not live");
+        address owner = proofSetOwner[setId];
+        require(owner == msg.sender, "Only the current owner can propose a new owner");
+        if (owner == newOwner) {
+            // If the owner proposes themself delete any outstanding proposed owner
+            delete proofSetProposedOwner[setId];
+        } else {
+            proofSetProposedOwner[setId] = newOwner;
+        }
+    }
+
+    function claimProofSetOwnership(uint256 setId) public {
+        require(proofSetLive(setId), "Proof set not live");
+        require(proofSetProposedOwner[setId] == msg.sender, "Only the proposed owner can claim ownership");
+        proofSetOwner[setId] = msg.sender;
+        delete proofSetProposedOwner[setId];
+    }
+
 
     // A proof set is created empty, with no roots. Creation yields a proof set ID 
     // for referring to the proof set later.
