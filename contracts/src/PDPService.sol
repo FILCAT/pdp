@@ -112,11 +112,17 @@ contract PDPService {
         return rootLeafCounts[setId][rootId];
     }
 
-    // owner proposes new owner
+    // owner proposes new owner.  If the owner proposes themself delete any outstanding proposed owner
     function proposeProofSetOwner(uint256 setId, address newOwner) public {
         require(proofSetLive(setId), "Proof set not live");
-        require(proofSetOwner[setId] == msg.sender, "Only the current owner can propose a new owner");
-        proofSetProposedOwner[setId] = newOwner;
+        address owner = proofSetOwner[setId];
+        require(owner == msg.sender, "Only the current owner can propose a new owner");
+        if (owner == newOwner) {
+            // If the owner proposes themself delete any outstanding proposed owner
+            delete proofSetProposedOwner[setId];
+        } else {
+            proofSetProposedOwner[setId] = newOwner;
+        }
     }
 
     function claimProofSetOwnership(uint256 setId) public {

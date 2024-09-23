@@ -89,11 +89,23 @@ contract PDPServiceOwnershipTest is Test {
     function testOwnershipTransfer() public {
         uint256 setId = pdpService.createProofSet();
         pdpService.proposeProofSetOwner(setId, nextOwner);
+        (address ownerStart, address proposedOwnerStart) = pdpService.getProofSetOwner(setId);
+        assertEq(ownerStart, owner, "Proof set owner should be the constructor sender");
+        assertEq(proposedOwnerStart, nextOwner, "Proof set proposed owner should make the one proposed");
         vm.prank(nextOwner); 
         pdpService.claimProofSetOwnership(setId);
-        (address actualOwner, address actualProposedOwner) = pdpService.getProofSetOwner(setId);
-        assertEq(actualOwner, nextOwner, "Proof set owner should be the next owner");
-        assertEq(actualProposedOwner, address(0), "Proof set proposed owner should be zero address");
+        (address ownerEnd, address proposedOwnerEnd) = pdpService.getProofSetOwner(setId);
+        assertEq(ownerEnd, nextOwner, "Proof set owner should be the next owner");
+        assertEq(proposedOwnerEnd, address(0), "Proof set proposed owner should be zero address");
+    }
+
+    function testOwnershipProposalReset() public {
+        uint256 setId = pdpService.createProofSet();
+        pdpService.proposeProofSetOwner(setId, nextOwner);
+        pdpService.proposeProofSetOwner(setId, owner);
+        (address ownerEnd, address proposedOwnerEnd) = pdpService.getProofSetOwner(setId);
+        assertEq(ownerEnd, owner, "Proof set owner should be the constructor sender");
+        assertEq(proposedOwnerEnd, address(0), "Proof set proposed owner should be zero address");
     }
 
     function testOwnershipPermissionsRequired() public {
