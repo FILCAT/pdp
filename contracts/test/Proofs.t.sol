@@ -83,6 +83,59 @@ contract MerkleProofTest is Test {
         assertEq(tree[0][0], expected);
     }
 
+    // Tests that the zero roots returned by the merkle library match the values computed for them here.
+    function testZeroRootsComputed() public view {
+        bytes32[] memory expected = buildZeroPaddingStack(51);
+        // console.log("Zero roots:");
+        // for (uint i = 0; i < zeroRoots.length; i++)  {
+        //     console.log(vm.toString(i), vm.toString(zeroRoots[i]));
+        // }
+        for (uint height = 0; height <= 50; height++) {
+            assertEq(MerkleProof.zeroRoot(height), expected[height]);
+        }
+    }
+
+    // Tests some zero roots against known values for Filecoin sector sizes.
+    // The target digets are copied directly from built-in actors code.
+    function testZeroRootFilecoinEquivalence() public pure {
+        assertEq(MerkleProof.zeroRoot(0), 0);
+        // 2 KiB / 32 = 64 leaves = 2^6
+        assertEq(MerkleProof.zeroRoot(6), loadDigest([
+            252, 126, 146, 130, 150, 229, 22, 250, 173, 233, 134, 178, 143, 146, 212, 74, 79, 36, 185,
+            53, 72, 82, 35, 55, 106, 121, 144, 39, 188, 24, 248, 51
+        ]));
+        // 8 MiB = 256Ki leaves = 2^8 * 2^10
+        assertEq(MerkleProof.zeroRoot(18), loadDigest([
+            101, 242, 158, 93, 152, 210, 70, 195, 139, 56, 140, 252, 6, 219, 31, 107, 2, 19, 3, 197,
+            162, 137, 0, 11, 220, 232, 50, 169, 195, 236, 66, 28
+        ]));
+        // 512 MiB = 16Mi leaves = 2^4 * 2^20
+        assertEq(MerkleProof.zeroRoot(24), loadDigest([
+            57, 86, 14, 123, 19, 169, 59, 7, 162, 67, 253, 39, 32, 255, 167, 203, 62, 29, 46, 80, 90,
+            179, 98, 158, 121, 244, 99, 19, 81, 44, 218, 6
+        ]));
+        // 32 GiB = 1Gi leaves = 2^30
+        assertEq(MerkleProof.zeroRoot(30), loadDigest([
+            7, 126, 95, 222, 53, 197, 10, 147, 3, 165, 80, 9, 227, 73, 138, 78, 190, 223, 243, 156, 66,
+            183, 16, 183, 48, 216, 236, 122, 199, 175, 166, 62
+        ]));
+        // 64 GiB = 2 * 1Gi leaves = 2^1 * 2^30
+        assertEq(MerkleProof.zeroRoot(31), loadDigest([
+            230, 64, 5, 166, 191, 227, 119, 121, 83, 184, 173, 110, 249, 63, 15, 202, 16, 73, 178, 4,
+            22, 84, 242, 164, 17, 247, 112, 39, 153, 206, 206, 2
+        ]));
+    }
+
+    // Tests that trees with explicit zero leaves produce known values for the root of the all-zero tree.
+    function testZeroTreeFilecoinEquivalence() public view {
+        for (uint i = 1; i <= 16; i++) {
+            bytes32[] memory leaves = new bytes32[](i);
+            bytes32[][] memory tree = buildMerkleTree(leaves);
+            uint256 height = 256 - BitOps.clz(i - 1);
+            assertEq(tree[0][0], MerkleProof.zeroRoot(height));
+        }
+    }
+
     ///// Helper functions /////
 
     function generateLeaves(uint256 count) internal pure returns (bytes32[] memory) {
@@ -96,7 +149,7 @@ contract MerkleProofTest is Test {
     // Builds a merkle tree from an array of leaves.
     // The tree is an array of arrays of bytes32.
     // The last array is the leaves, and each prior array is the result of the commutative hash of pairs in the previous array.
-    // An unpaired element is paired with itself to create the value at the next level up.
+    // An unpaired element is paired with the root of a tree of the same height with zero leaves.
     // The first element of the first array is the root.
     function buildMerkleTree(bytes32[] memory leaves) internal view returns (bytes32[][] memory) {
         require(leaves.length > 0, "Leaves array must not be empty");
@@ -114,8 +167,8 @@ contract MerkleProofTest is Test {
                 if (2 * j + 1 < currentLevel.length) {
                     tree[i - 1][j] = Hashes.orderedHash(currentLevel[2 * j], currentLevel[2 * j + 1]);
                 } else {
-                    // Pair final odd node with itself.
-                    tree[i - 1][j] = Hashes.orderedHash(currentLevel[2 * j], currentLevel[2 * j]);
+                    // Pair final odd node with a zero-tree of same height.
+                    tree[i - 1][j] = Hashes.orderedHash(currentLevel[2 * j], MerkleProof.zeroRoot(levels - i));
                 }
             }
         }
@@ -140,13 +193,26 @@ contract MerkleProofTest is Test {
             if (pairIndex < levelSize) {
                 proof[proofIndex] = tree[i][pairIndex];
             } else {
-                // Pair final odd node with itself
-                proof[proofIndex] = tree[i][index];
+                // Pair final odd node with zero-tree of same height.
+                proof[proofIndex] = MerkleProof.zeroRoot(tree.length - 1 - i);
             }
             proofIndex++;
             index /= 2; // Move to the parent node
         }
         return proof;
+    }
+
+    // Returns an array of Merkle tree roots committing to all-zero data of increasing tree heights.
+    // The first entry is zero.
+    // The second entry is a node with two zero leaves.
+    // The third entry is a node with four zero leaves, etc.
+    function buildZeroPaddingStack(uint256 levels) public view returns (bytes32[] memory) {
+        bytes32[] memory result = new bytes32[](levels);
+        for (uint i = 1; i < levels; i++) {
+            result[i] = Hashes.orderedHash(result[i-1], result[i-1]);
+        }
+
+        return result;
     }
 
     // Loads a bytes32 hash digest from an array of 32 1-byte values.
