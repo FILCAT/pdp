@@ -237,21 +237,82 @@ contract SumTreeAddTest is Test {
 
         // Test edge cases
         vm.expectRevert("Leaf index out of bounds");
-        pdpService.findRootId(testSetId, 820);
+        uint256[] memory outOfBounds = new uint256[](1);
+        outOfBounds[0] = 820;
+        pdpService.findRootIds(testSetId, outOfBounds);
 
         vm.expectRevert("Leaf index out of bounds");
-        pdpService.findRootId(testSetId, 1000);
+        outOfBounds[0] = 1000;
+        pdpService.findRootIds(testSetId, outOfBounds);
+    }
+
+    function testBatchFindRootId() public {
+        setUpTestingArray();
+        uint256[] memory searchIndexes = new uint256[](12);
+        searchIndexes[0] = 0;
+        searchIndexes[1] = 199;
+        searchIndexes[2] = 200;
+        searchIndexes[3] = 299;
+        searchIndexes[4] = 300;
+        searchIndexes[5] = 329;
+        searchIndexes[6] = 330;
+        searchIndexes[7] = 379;
+        searchIndexes[8] = 380;
+        searchIndexes[9] = 779;
+        searchIndexes[10] = 780;
+        searchIndexes[11] = 819;
+
+        uint256[] memory expectedRoots = new uint256[](12);
+        expectedRoots[0] = 0;
+        expectedRoots[1] = 0;
+        expectedRoots[2] = 1;
+        expectedRoots[3] = 1;
+        expectedRoots[4] = 3;
+        expectedRoots[5] = 3;
+        expectedRoots[6] = 4;
+        expectedRoots[7] = 4;
+        expectedRoots[8] = 6;
+        expectedRoots[9] = 6;
+        expectedRoots[10] = 7;
+        expectedRoots[11] = 7;
+
+        uint256[] memory expectedOffsets = new uint256[](12);
+        expectedOffsets[0] = 0;
+        expectedOffsets[1] = 199;
+        expectedOffsets[2] = 0;
+        expectedOffsets[3] = 99;
+        expectedOffsets[4] = 0;
+        expectedOffsets[5] = 29;
+        expectedOffsets[6] = 0;
+        expectedOffsets[7] = 49;
+        expectedOffsets[8] = 0;
+        expectedOffsets[9] = 399;
+        expectedOffsets[10] = 0;
+        expectedOffsets[11] = 39;
+
+        assertFindRootsAndOffsets(testSetId, searchIndexes, expectedRoots, expectedOffsets);
     }
 
     error TestingFindError(uint256 expected, uint256 actual, string msg);
 
     function assertFindRootAndOffset(uint256 setId, uint256 searchIndex, uint256 expectRootId, uint256 expectOffset) internal view {
-        (uint256 rootId, uint256 offset) = pdpService.findRootId(setId, searchIndex);
-        if (rootId != expectRootId) {
-            revert TestingFindError(expectRootId, rootId, "unexpected root");
+        uint256[] memory searchIndices = new uint256[](1);
+        searchIndices[0] = searchIndex;
+        PDPService.RootIdAndOffset[] memory result = pdpService.findRootIds(setId, searchIndices);
+        if (result[0].rootId != expectRootId) {
+            revert TestingFindError(expectRootId, result[0].rootId, "unexpected root");
         }
-        if (offset != expectOffset) {
-            revert TestingFindError(expectOffset, offset, "unexpected offset");
+        if (result[0].offset != expectOffset) {
+            revert TestingFindError(expectOffset, result[0].offset, "unexpected offset");
+        }
+    }
+
+    // The batched version of assertFindRootAndOffset
+    function assertFindRootsAndOffsets(uint256 setId, uint256[] memory searchIndices, uint256[] memory expectRootIds, uint256[] memory expectOffsets) internal view {
+        PDPService.RootIdAndOffset[] memory result = pdpService.findRootIds(setId, searchIndices);
+        for (uint256 i = 0; i < searchIndices.length; i++) {
+            assertEq(result[i].rootId, expectRootIds[i], "unexpected root");
+            assertEq(result[i].offset, expectOffsets[i], "unexpected offset");
         }
     }
 

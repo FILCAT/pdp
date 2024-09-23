@@ -196,15 +196,13 @@ contract PDPService {
         return delta;
     }
 
-    // findRoot returns the root id for a given leaf index and the leaf's offset within
-    // the rootId.
-    // 
-    // It does this by running a binary search over the logical array
-    // To do this efficiently we walk the sumtree.
-    function findRootId(uint256 setId, uint256 leafIndex) public view returns (uint256, uint256) { 
+    struct RootIdAndOffset {
+        uint256 rootId;
+        uint256 offset;
+    }
+
+    function findOneRootId(uint256 setId, uint256 leafIndex, uint256 top) internal view returns (RootIdAndOffset memory) { 
         require(leafIndex < proofSetLeafCount[setId], "Leaf index out of bounds");
-        // The top of the sumtree is the largest power of 2 less than the number of roots
-        uint256 top = 256 - BitOps.clz(nextRootId[setId]);
         uint256 searchPtr = (1 << top) - 1;
         uint256 acc = 0;
 
@@ -231,9 +229,24 @@ contract PDPService {
         candidate = acc + sumTreeCounts[setId][searchPtr];
         if (candidate <= leafIndex) {
             // Choose right 
-            return (searchPtr + 1, leafIndex - candidate); 
+            return RootIdAndOffset(searchPtr + 1, leafIndex - candidate); 
         } // Choose left
-        return (searchPtr, leafIndex - acc);
+        return RootIdAndOffset(searchPtr, leafIndex - acc);
+    }
+
+    // findRoot returns the root id for a given leaf index and the leaf's offset within
+    // the rootId.
+    // 
+    // It does this by running a binary search over the logical array
+    // To do this efficiently we walk the sumtree.
+    function findRootIds(uint256 setId, uint256[] calldata leafIndexs) public view returns (RootIdAndOffset[] memory) { 
+        // The top of the sumtree is the largest power of 2 less than the number of roots
+        uint256 top = 256 - BitOps.clz(nextRootId[setId]);
+        RootIdAndOffset[] memory result = new RootIdAndOffset[](leafIndexs.length);
+        for (uint256 i = 0; i < leafIndexs.length; i++) {
+            result[i] = findOneRootId(setId, leafIndexs[i], top);
+        }
+        return result;
     }
 
 
