@@ -1,4 +1,6 @@
 #!/bin/bash
+# Usage: ./size.sh <contract-address> <proof-set-id>
+# Returns the total number of root ids ever added to the proof set
 
 # Check if required environment variables are set
 if [ -z "$RPC_URL" ] || [ -z "$KEYSTORE" ]; then

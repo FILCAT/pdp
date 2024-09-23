@@ -1,4 +1,9 @@
 #! /bin/bash
+# deploy-devnet deploys the PDP service contract and all auxillary contracts to a filecoin devnet
+# Assumption: KEYSTORE, PASSWORD, RPC_URL env vars are set to an appropriate eth keystore path and password
+# and to a valid RPC_URL for the devnet.
+# Assumption: forge, cast, lotus, jq are in the PATH
+#
 echo "Deploying to devnet"
 
 if [ -z "$RPC_URL" ]; then

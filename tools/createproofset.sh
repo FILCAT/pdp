@@ -1,6 +1,5 @@
 #! /bin/bash
-
-#!/bin/bash
+# Usage: ./createproofset.sh <contract-address>
 
 # Check if required environment variables are set
 if [ -z "$RPC_URL" ] || [ -z "$KEYSTORE" ] ; then
