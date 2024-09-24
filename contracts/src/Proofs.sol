@@ -1,18 +1,19 @@
 // SPDX-License-Identifier: MIT
-// Adapted from OpenZeppelin Contracts (last updated v5.0.0) (utils/cryptography/MerkleProof.sol)
-// Changes:
-// - Specialised to hash function of SHA256
-// - Removed unused functions, incl multiproofs
-// - Remove redundant comments and cruft
+// The verification functions are adapted from OpenZeppelin Contracts (last updated v5.0.0) (utils/cryptography/MerkleProof.sol)
 
 pragma solidity ^0.8.20;
 
+import {BitOps} from "./BitOps.sol";
+
 /**
- * These functions deal with verification of Merkle Tree proofs.
- *
- * They are specialised to the hash function of SHA256.
+ * Functions for the generation and verification of Merkle proofs.
+ * These are specialised to the hash function of SHA254 and implicitly balanced trees.
+ * 
+ * Note that only the verification functions are intended to execute on-chain.
+ * The commitment and proof generation functions are co-located for convenience and to function
+ * as a specification for off-chain operations.
  */
-library MerkleProof {
+library MerkleVerify {
     /**
      * Returns true if a `leaf` can be proved to be a part of a Merkle tree
      * defined by `root` at `position`. For this, a `proof` must be provided, containing
@@ -143,6 +144,64 @@ library MerkleProof {
             0x0b5b44ccf91ff135af58d2cf694b2ac99f22f5264863d6b9272b6155956aa10e
         ];
         return bytes32(ZERO_ROOTS[height]);
+    }
+}
+
+library MerkleProve {
+    // Builds a merkle tree from an array of leaves.
+    // The tree is an array of arrays of bytes32.
+    // The last array is the leaves, and each prior array is the result of the commutative hash of pairs in the previous array.
+    // An unpaired element is paired with the root of a tree of the same height with zero leaves.
+    // The first element of the first array is the root.
+    function buildMerkleTree(bytes32[] memory leaves) internal view returns (bytes32[][] memory) {
+        require(leaves.length > 0, "Leaves array must not be empty");
+
+        uint256 levels = 256 - BitOps.clz(leaves.length - 1);
+        bytes32[][] memory tree = new bytes32[][](levels + 1);
+        tree[levels] = leaves;
+
+        for (uint256 i = levels; i > 0; i--) {
+            bytes32[] memory currentLevel = tree[i];
+            uint256 nextLevelSize = (currentLevel.length + 1) / 2;
+            tree[i - 1] = new bytes32[](nextLevelSize);
+
+            for (uint256 j = 0; j < nextLevelSize; j++) {
+                if (2 * j + 1 < currentLevel.length) {
+                    tree[i - 1][j] = Hashes.orderedHash(currentLevel[2 * j], currentLevel[2 * j + 1]);
+                } else {
+                    // Pair final odd node with a zero-tree of same height.
+                    tree[i - 1][j] = Hashes.orderedHash(currentLevel[2 * j], MerkleVerify.zeroRoot(levels - i));
+                }
+            }
+        }
+
+        return tree;
+    }
+
+    // Gets an inclusion proof from a Merkle tree for a leaf at a given index.
+    // The proof is constructed by traversing up the tree to the root, and the sibling of each node is appended to the proof.
+    // A final unpaired element in any level is paired with itself.
+    // Every proof thus has length equal to the height of the tree minus 1.
+    function buildProof(bytes32[][] memory tree, uint256 index) internal pure returns (bytes32[] memory) {
+        require(index < tree[tree.length - 1].length, "Index out of bounds");
+
+        bytes32[] memory proof = new bytes32[](tree.length - 1);
+        uint256 proofIndex = 0;
+
+        for (uint256 i = tree.length - 1; i > 0; i--) {
+            uint256 levelSize = tree[i].length;
+            uint256 pairIndex = index ^ 1; // XOR with 1 to get the pair index
+
+            if (pairIndex < levelSize) {
+                proof[proofIndex] = tree[i][pairIndex];
+            } else {
+                // Pair final odd node with zero-tree of same height.
+                proof[proofIndex] = MerkleVerify.zeroRoot(tree.length - 1 - i);
+            }
+            proofIndex++;
+            index /= 2; // Move to the parent node
+        }
+        return proof;
     }
 }
 

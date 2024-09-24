@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import {BitOps} from "../src/BitOps.sol";
 import {Cids} from "../src/Cids.sol";
-import {MerkleProof} from "../src/Proofs.sol";
+import {MerkleVerify} from "../src/Proofs.sol";
 
 contract PDPService {
     // Constants
@@ -294,7 +294,6 @@ contract PDPService {
 
     struct Proof {
         bytes32 leaf;
-        uint256 leafOffset;
         bytes32[] proof;
     }
 
@@ -303,7 +302,29 @@ contract PDPService {
     // by the epoch of the previous proof of possession.
     // Note that this method is not restricted to the proof set owner.
     function provePossession(uint256 setId, Proof[] calldata proofs) public {
-        // TODO: implement me
+        uint256 challengeEpoch = nextChallengeEpoch[setId];
+        require(block.number >= challengeEpoch, "premature proof");
+
+        // TODO: fetch proper seed from chain randomness
+        uint256 seed = challengeEpoch;
+        uint256 leafCount = getProofSetLeafCount(setId);
+        uint256 sumTreeTop = 256 - BitOps.clz(nextRootId[setId]);
+
+        for (uint64 i = 0; i < proofs.length; i++) {
+            // Hash (SHA3) the seed,  proof set id, and proof index to create challenge.
+            bytes memory payload = abi.encodePacked(seed, setId, i);
+            uint256 challengeIdx = uint256(keccak256(payload)) % leafCount;
+
+            // Find the root that has this leaf, and the offset of the leaf within that root.
+            RootIdAndOffset memory root = findOneRootId(setId, challengeIdx, sumTreeTop);
+            bytes32 rootHash = Cids.digestFromCid(getRootCid(setId, root.rootId));
+            bool ok = MerkleVerify.verify(proofs[i].proof, rootHash, proofs[i].leaf, root.offset);
+            require(ok, "proof did not verify");
+        }
+
+        // Set the next challenge epoch.
+        nextChallengeEpoch[setId] = block.number + challengeFinality; 
+        // TODO: record the successful proof somewhere.
     }
 
     /* Sum tree functions */

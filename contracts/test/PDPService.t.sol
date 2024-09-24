@@ -1,8 +1,10 @@
 pragma solidity ^0.8.13;
 
 import {Test, console} from "forge-std/Test.sol";
-import {PDPService} from "../src/PDPService.sol";
 import {Cids} from "../src/Cids.sol";
+import {PDPService} from "../src/PDPService.sol";
+import {MerkleProve} from "../src/Proofs.sol";
+import {ProofUtil} from "./ProofUtil.sol";
 
 
 contract PDPServiceProofSetCreateDeleteTest is Test {
@@ -26,6 +28,7 @@ contract PDPServiceProofSetCreateDeleteTest is Test {
         assertEq(pdpService.rootLive(setId, 0), false, "Proof set root should not be live");
         assertEq(pdpService.getRootCid(setId, 0).data, zeroRoot.data, "Uninitialized root should be empty");
         assertEq(pdpService.getRootLeafCount(setId, 0), 0, "Uninitialized root should have zero leaves");
+        assertEq(pdpService.getNextChallengeEpoch(setId), 0, "Proof set challenge epoch should be zero");
     }
 
     function testDeleteProofSet() public {
@@ -313,6 +316,133 @@ contract PDPServiceProofSetMutateTest is Test {
     }
 }
 
+contract PDPServiceProofTest is Test {
+    uint256 constant challengeFinalityDelay = 2;
+    string constant cidPrefix = "CID";
+    PDPService pdpService;
+
+    function setUp() public {
+        pdpService = new PDPService(challengeFinalityDelay);
+    }
+
+    function testProveSingleRoot() public {
+        uint leafCount = 10;
+        bytes32[][] memory tree = makeTree(leafCount);
+        // console.log("root          ", vm.toString(tree[0][0]));
+
+        // Create new proof set and add root.
+        uint256 setId = pdpService.createProofSet();
+        PDPService.RootData[] memory roots = new PDPService.RootData[](1);
+        roots[0] = makeRoot(tree, leafCount);
+        pdpService.addRoots(setId, roots);
+
+        // Advance chain until challenge epoch.
+        uint256 challengeEpoch = pdpService.getNextChallengeEpoch(setId);
+        vm.roll(challengeEpoch);
+
+        // Build a proof with  multiple challenges to single tree.
+        uint challengeCount = 3;
+        bytes32[][][] memory trees = new bytes32[][][](1);
+        trees[0] = tree;
+        uint[] memory leafCounts = new uint[](1);
+        leafCounts[0] = leafCount;
+        PDPService.Proof[] memory proofs = buildProofs(setId, challengeCount, trees, leafCounts);
+
+        // Submit proof.
+        pdpService.provePossession(setId, proofs);
+        // Verify the next challenge is in a subsequent epoch.
+        assertEq(pdpService.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
+    }
+
+    function testProveManyRoots() public {
+        // Build Merkle trees.
+        uint rootCount = 3;
+        uint[] memory leafCounts = new uint[](rootCount);
+        bytes32[][][] memory trees = new bytes32[][][](rootCount);
+        PDPService.RootData[] memory roots = new PDPService.RootData[](rootCount);
+        for (uint i = 0; i < rootCount; i++) {
+            // Generate different size trees up to max leaves.
+            leafCounts[i] = uint256(sha256(abi.encode(i))) % 64;
+            trees[i] = makeTree(leafCounts[i]);
+            roots[i] = makeRoot(trees[i], leafCounts[i]);
+        }
+
+        // Create new proof set and add roots.
+        uint256 setId = pdpService.createProofSet();
+        pdpService.addRoots(setId, roots);
+
+        // Advance chain until challenge epoch.
+        uint256 challengeEpoch = pdpService.getNextChallengeEpoch(setId);
+        vm.roll(challengeEpoch);
+
+        // Build a proof with multiple challenges to span the roots.
+        uint challengeCount = 7;
+        PDPService.Proof[] memory proofs = buildProofs(setId, challengeCount, trees, leafCounts);
+        // Submit proof.
+        pdpService.provePossession(setId, proofs);
+        // Verify the next challenge is in a subsequent epoch.
+        assertEq(pdpService.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
+    }
+
+    // Builds a Merkle tree over data that is a sequence of distinct leaf values.
+    function makeTree(uint leafCount) internal view returns (bytes32[][] memory) {
+        bytes32[] memory data = ProofUtil.generateLeaves(leafCount);
+        bytes32[][] memory tree = MerkleProve.buildMerkleTree(data);
+        return tree;
+    }
+
+    // Constructs a RootData structure for a Merkle tree.
+    function makeRoot(bytes32[][] memory tree, uint leafCount) internal pure returns (PDPService.RootData memory) {
+        return PDPService.RootData(Cids.cidFromDigest(bytes(cidPrefix), tree[0][0]), leafCount * 32);
+    }
+
+    // Builds a proof of posession for a proof set
+    function buildProofs(uint256 setId, uint challengeCount, bytes32[][][] memory trees, uint[] memory leafCounts) internal view returns (PDPService.Proof[] memory) {
+        uint256 challengeEpoch = pdpService.getNextChallengeEpoch(setId);
+        uint256 seed = challengeEpoch; // Seed is (temporarily) the challenge epoch
+        uint totalLeafCount = 0;
+        for (uint i = 0; i < leafCounts.length; ++i) {
+            totalLeafCount += leafCounts[i];
+        }
+        
+        // console.log("seed", vm.toString(seed));
+        PDPService.Proof[] memory proofs = new PDPService.Proof[](challengeCount);
+        for (uint challengeIdx = 0; challengeIdx < challengeCount; challengeIdx++) {
+            // Compute challenge index
+            bytes memory payload = abi.encodePacked(seed, setId, uint64(challengeIdx));
+            uint256 challengeOffset = uint256(keccak256(payload)) % totalLeafCount;
+            // console.log("challengeIdx", vm.toString(challengeIdx));
+
+            uint treeIdx = 0;
+            uint256 treeOffset = 0;
+            for (uint i = 0; i < leafCounts.length; ++i) {
+                if (leafCounts[i] >= challengeOffset) {
+                    treeIdx = i;
+                    treeOffset = challengeOffset;
+                } else {
+                    challengeOffset -= leafCounts[i];
+                }
+            }
+
+            bytes32[][] memory tree = trees[treeIdx];
+            bytes32[] memory path = MerkleProve.buildProof(tree, treeOffset);
+            proofs[challengeIdx] = PDPService.Proof(tree[tree.length - 1][treeOffset], path);
+
+            // console.log("Leaf", vm.toString(proofs[0].leaf));
+            // console.log("Proof");
+            // for (uint j = 0; j < proofs[0].proof.length; j++) {
+            //     console.log(vm.toString(j), vm.toString(proofs[0].proof[j]));
+            // }
+        }
+
+        return proofs;
+    }
+
+    // TODO:
+    // - reject premature proof
+    // - proof ok at or after challenge epoch
+}
+
 contract SumTreeInternalTestPDPService is PDPService {
     constructor(uint256 _challengeFinality) PDPService(_challengeFinality) {}
 
@@ -332,7 +462,7 @@ contract SumTreeHeightTest is Test {
         pdpService = new SumTreeInternalTestPDPService(2);
     }
 
-    function testHeightFromIndex() public {
+    function testHeightFromIndex() public view {
         // https://oeis.org/A001511
         uint8[105] memory oeisA001511 = [
             1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 6, 
