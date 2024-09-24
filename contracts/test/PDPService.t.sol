@@ -160,11 +160,157 @@ contract PDPServiceProofSetMutateTest is Test {
         assertTrue(pdpService.rootLive(setId, rootId));
         assertEq(pdpService.getRootCid(setId, rootId).data, roots[0].root.data);
         assertEq(pdpService.getRootLeafCount(setId, rootId), leafCount);
+
+        assertEq(pdpService.getNextRootId(setId), 1);
     }
 
-    // TODO: test bad inputs to addRoot
-    // TODO: test getters after adding multiple roots
-    // TODO: test removing roots, good and bad inputs, getters
+    function testAddMultipleRoots() public {
+        uint256 setId = pdpService.createProofSet();
+        PDPService.RootData[] memory roots = new PDPService.RootData[](2);
+        roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test1")), 64);
+        roots[1] = PDPService.RootData(Cids.Cid(abi.encodePacked("test2")), 128);
+        uint256 firstId = pdpService.addRoots(setId, roots);
+        assertEq(firstId, 0);
+
+        uint256 expectedLeafCount = roots[0].rawSize / 32 + roots[1].rawSize / 32;
+        assertEq(pdpService.getProofSetLeafCount(setId), expectedLeafCount);
+        assertEq(pdpService.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
+
+        assertTrue(pdpService.rootLive(setId, firstId));
+        assertTrue(pdpService.rootLive(setId, firstId + 1));
+        assertEq(pdpService.getRootCid(setId, firstId).data, roots[0].root.data);
+        assertEq(pdpService.getRootCid(setId, firstId + 1).data, roots[1].root.data);
+
+        assertEq(pdpService.getRootLeafCount(setId, firstId), roots[0].rawSize / 32);
+        assertEq(pdpService.getRootLeafCount(setId, firstId + 1), roots[1].rawSize / 32);
+        assertEq(pdpService.getNextRootId(setId), 2);
+    }
+
+    function expectIndexedError(uint256 index, string memory expectedMessage) internal {
+        vm.expectRevert(abi.encodeWithSelector(PDPService.IndexedError.selector, index, expectedMessage));
+    }
+
+    function testAddBadRoot() public {
+        uint256 setId = pdpService.createProofSet();
+        PDPService.RootData[] memory roots = new PDPService.RootData[](1);
+
+        // Fail when root size is not a multiple of 32
+        roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 63);
+        expectIndexedError(0, "Size must be a multiple of 32");
+        pdpService.addRoots(setId, roots);
+
+        // Fail when root size is zero
+        roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 0);
+        expectIndexedError(0, "Size must be greater than 0");
+        pdpService.addRoots(setId, roots);
+
+        // Fail when root size is too large
+        roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), pdpService.MAX_ROOT_SIZE() + 32);
+        expectIndexedError(0, "Root size must be less than 2^50");
+        pdpService.addRoots(setId, roots);
+
+        // Fail when not adding any roots;
+        PDPService.RootData[] memory emptyRoots = new PDPService.RootData[](0);
+        vm.expectRevert("Must add at least one root");
+        pdpService.addRoots(setId, emptyRoots);
+
+        // Fail when proof set is no longer live
+        roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 32);
+        pdpService.deleteProofSet(setId);
+        vm.expectRevert("Proof set not live");
+        pdpService.addRoots(setId, roots);
+    }
+
+    function testAddBadRootsBatched() public {
+        // Add one bad root, message fails on bad index
+        uint256 setId = pdpService.createProofSet();
+        PDPService.RootData[] memory roots = new PDPService.RootData[](4);
+        roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 32);
+        roots[1] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 32);
+        roots[2] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 32);
+        roots[3] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 31);
+
+        expectIndexedError(3, "Size must be a multiple of 32");
+        pdpService.addRoots(setId, roots);
+
+        // Add multiple bad roots, message fails on first bad index
+        roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 63);
+        expectIndexedError(0, "Size must be a multiple of 32");
+        pdpService.addRoots(setId, roots);
+    }
+
+    function testRemoveRoot() public {
+        // Add one root
+        uint256 setId = pdpService.createProofSet();
+        PDPService.RootData[] memory roots = new PDPService.RootData[](1);
+        roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 64);
+        pdpService.addRoots(setId, roots);
+
+        // Remove root
+        uint256[] memory toRemove = new uint256[](1);
+        toRemove[0] = 0;
+        pdpService.removeRoots(setId, toRemove);
+
+        assertEq(pdpService.rootLive(setId, 0), false);
+        assertEq(pdpService.getNextRootId(setId), 1);
+        assertEq(pdpService.getProofSetLeafCount(setId), 0);
+        assertEq(pdpService.getNextChallengeEpoch(setId), 0);
+        bytes memory emptyCidData = new bytes(0);
+        assertEq(pdpService.getRootCid(setId, 0).data, emptyCidData);
+        assertEq(pdpService.getRootLeafCount(setId, 0), 0);
+    }
+
+    function testRemoveRootBatch() public {
+        uint256 setId = pdpService.createProofSet();
+        PDPService.RootData[] memory roots = new PDPService.RootData[](3);
+        roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test1")), 64);
+        roots[1] = PDPService.RootData(Cids.Cid(abi.encodePacked("test2")), 64);
+        roots[2] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 64);
+        pdpService.addRoots(setId, roots);
+
+        uint256[] memory toRemove = new uint256[](2);
+        toRemove[0] = 0;
+        toRemove[1] = 2;
+        pdpService.removeRoots(setId, toRemove);
+
+        assertEq(pdpService.rootLive(setId, 0), false);
+        assertEq(pdpService.rootLive(setId, 1), true);
+        assertEq(pdpService.rootLive(setId, 2), false);
+
+        assertEq(pdpService.getNextRootId(setId), 3);
+        assertEq(pdpService.getProofSetLeafCount(setId), 64/32);
+        assertEq(pdpService.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
+
+        bytes memory emptyCidData = new bytes(0);
+        assertEq(pdpService.getRootCid(setId, 0).data, emptyCidData);
+        assertEq(pdpService.getRootCid(setId, 1).data, roots[1].root.data);
+        assertEq(pdpService.getRootCid(setId, 2).data, emptyCidData);
+
+        assertEq(pdpService.getRootLeafCount(setId, 0), 0);
+        assertEq(pdpService.getRootLeafCount(setId, 1), 64/32);
+        assertEq(pdpService.getRootLeafCount(setId, 2), 0);
+
+    }
+    
+    function testRemoveBadRootDoesntFail() public {
+        uint256 setId = pdpService.createProofSet();
+        PDPService.RootData[] memory roots = new PDPService.RootData[](1);
+        roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 64);
+        pdpService.addRoots(setId, roots);
+
+        uint256[] memory toRemove = new uint256[](1);
+        toRemove[0] = 1;
+        pdpService.removeRoots(setId, toRemove);
+
+        toRemove[0] = 0;
+        pdpService.removeRoots(setId, toRemove);
+        assertEq(false, pdpService.rootLive(setId, 0));
+
+        // Removing again fails
+        pdpService.removeRoots(setId, toRemove);
+        assertEq(false, pdpService.rootLive(setId, 0));
+
+    }
 }
 
 contract SumTreeInternalTestPDPService is PDPService {

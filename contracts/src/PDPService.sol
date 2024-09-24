@@ -8,6 +8,7 @@ import {MerkleProof} from "../src/Proofs.sol";
 contract PDPService {
     // Constants
     uint256 public constant LEAF_SIZE = 32;
+    uint256 public constant MAX_ROOT_SIZE = 1 << 50;
 
     // Types
 
@@ -194,10 +195,11 @@ contract PDPService {
         if (rawSize % LEAF_SIZE != 0) {
             revert IndexedError(callIdx, "Size must be a multiple of 32");
         }
-        // TODO: add this check after remove operation is implemented and we can easily
-        // test 0 sizes without adding them directly.
         if (rawSize == 0) {
             revert IndexedError(callIdx, "Size must be greater than 0");
+        }
+        if (rawSize > MAX_ROOT_SIZE) {
+            revert IndexedError(callIdx, "Root size must be less than 2^50");
         }
 
         uint256 leafCount = rawSize / LEAF_SIZE;
