@@ -9,14 +9,16 @@ import {ProofUtil} from "./ProofUtil.sol";
 
 contract PDPServiceProofSetCreateDeleteTest is Test {
     PDPService pdpService;
+    PDPRecordKeeper recordKeeper;
 
     function setUp() public {
         pdpService = new PDPService(2);
+        recordKeeper = new PDPRecordKeeper(address(pdpService));
     }
 
     function testCreateProofSet() public {
         Cids.Cid memory zeroRoot;
-        uint256 setId = pdpService.createProofSet();
+        uint256 setId = pdpService.createProofSet(address(recordKeeper));
         assertEq(setId, 0, "First proof set ID should be 0");
         assertEq(pdpService.getProofSetLeafCount(setId), 0, "Proof set leaf count should be 0");
 
@@ -32,14 +34,14 @@ contract PDPServiceProofSetCreateDeleteTest is Test {
     }
 
     function testDeleteProofSet() public {
-        uint256 setId = pdpService.createProofSet();
+        uint256 setId = pdpService.createProofSet(address(recordKeeper));
         pdpService.deleteProofSet(setId);
         vm.expectRevert("Proof set not live");
         pdpService.getProofSetLeafCount(setId);
     }
 
     function testOnlyOwnerCanDeleteProofSet() public {
-        uint256 setId = pdpService.createProofSet();
+        uint256 setId = pdpService.createProofSet(address(recordKeeper));
         // Create a new address to act as a non-owner
         address nonOwner = address(0x1234);
         // Expect revert when non-owner tries to delete the proof set
@@ -60,7 +62,7 @@ contract PDPServiceProofSetCreateDeleteTest is Test {
     }
 
     function testMethodsOnDeletedProofSetFails() public {
-        uint256 setId = pdpService.createProofSet();
+        uint256 setId = pdpService.createProofSet(address(recordKeeper));
         pdpService.deleteProofSet(setId);
         vm.expectRevert("Only the owner can delete proof sets");
         pdpService.deleteProofSet(setId);
@@ -79,20 +81,22 @@ contract PDPServiceProofSetCreateDeleteTest is Test {
     }
 
     function testGetProofSetID() public {
-        pdpService.createProofSet();
-        pdpService.createProofSet();
+        pdpService.createProofSet(address(recordKeeper));
+        pdpService.createProofSet(address(recordKeeper));
         assertEq(2, pdpService.getNextProofSetId(), "Next proof set ID should be 2");
     }
 }
 
 contract PDPServiceOwnershipTest is Test {
     PDPService pdpService;
+    PDPRecordKeeper recordKeeper;
     address public owner;
     address public nextOwner;
     address public nonOwner;
 
     function setUp() public {
         pdpService = new PDPService(2);
+        recordKeeper = new PDPRecordKeeper(address(pdpService));
 
         owner = address(this);
         nextOwner = address(0x1234);
@@ -100,7 +104,7 @@ contract PDPServiceOwnershipTest is Test {
     }
 
     function testOwnershipTransfer() public {
-        uint256 setId = pdpService.createProofSet();
+        uint256 setId = pdpService.createProofSet(address(recordKeeper));
         pdpService.proposeProofSetOwner(setId, nextOwner);
         (address ownerStart, address proposedOwnerStart) = pdpService.getProofSetOwner(setId);
         assertEq(ownerStart, owner, "Proof set owner should be the constructor sender");
@@ -113,7 +117,7 @@ contract PDPServiceOwnershipTest is Test {
     }
 
     function testOwnershipProposalReset() public {
-        uint256 setId = pdpService.createProofSet();
+        uint256 setId = pdpService.createProofSet(address(recordKeeper));
         pdpService.proposeProofSetOwner(setId, nextOwner);
         pdpService.proposeProofSetOwner(setId, owner);
         (address ownerEnd, address proposedOwnerEnd) = pdpService.getProofSetOwner(setId);
@@ -122,7 +126,7 @@ contract PDPServiceOwnershipTest is Test {
     }
 
     function testOwnershipPermissionsRequired() public {
-        uint256 setId = pdpService.createProofSet();
+        uint256 setId = pdpService.createProofSet(address(recordKeeper));
         vm.prank(nonOwner);
         vm.expectRevert("Only the current owner can propose a new owner");
         pdpService.proposeProofSetOwner(setId, nextOwner);
@@ -145,13 +149,15 @@ contract PDPServiceProofSetMutateTest is Test {
     uint256 constant challengeFinalityDelay = 2;
 
     PDPService pdpService;
+    PDPRecordKeeper recordKeeper;
 
     function setUp() public {
         pdpService = new PDPService(challengeFinalityDelay);
+        recordKeeper = new PDPRecordKeeper(address(pdpService));
     }
 
     function testAddRoot() public {
-        uint256 setId = pdpService.createProofSet();
+        uint256 setId = pdpService.createProofSet(address(recordKeeper));
         PDPService.RootData[] memory roots = new PDPService.RootData[](1);
         roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         uint256 rootId = pdpService.addRoots(setId, roots);
@@ -168,7 +174,7 @@ contract PDPServiceProofSetMutateTest is Test {
     }
 
     function testAddMultipleRoots() public {
-        uint256 setId = pdpService.createProofSet();
+        uint256 setId = pdpService.createProofSet(address(recordKeeper));
         PDPService.RootData[] memory roots = new PDPService.RootData[](2);
         roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test1")), 64);
         roots[1] = PDPService.RootData(Cids.Cid(abi.encodePacked("test2")), 128);
@@ -194,7 +200,7 @@ contract PDPServiceProofSetMutateTest is Test {
     }
 
     function testAddBadRoot() public {
-        uint256 setId = pdpService.createProofSet();
+        uint256 setId = pdpService.createProofSet(address(recordKeeper));
         PDPService.RootData[] memory roots = new PDPService.RootData[](1);
 
         // Fail when root size is not a multiple of 32
@@ -226,7 +232,7 @@ contract PDPServiceProofSetMutateTest is Test {
 
     function testAddBadRootsBatched() public {
         // Add one bad root, message fails on bad index
-        uint256 setId = pdpService.createProofSet();
+        uint256 setId = pdpService.createProofSet(address(recordKeeper));
         PDPService.RootData[] memory roots = new PDPService.RootData[](4);
         roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 32);
         roots[1] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 32);
@@ -244,7 +250,7 @@ contract PDPServiceProofSetMutateTest is Test {
 
     function testRemoveRoot() public {
         // Add one root
-        uint256 setId = pdpService.createProofSet();
+        uint256 setId = pdpService.createProofSet(address(recordKeeper));
         PDPService.RootData[] memory roots = new PDPService.RootData[](1);
         roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         pdpService.addRoots(setId, roots);
@@ -264,7 +270,7 @@ contract PDPServiceProofSetMutateTest is Test {
     }
 
     function testRemoveRootBatch() public {
-        uint256 setId = pdpService.createProofSet();
+        uint256 setId = pdpService.createProofSet(address(recordKeeper));
         PDPService.RootData[] memory roots = new PDPService.RootData[](3);
         roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test1")), 64);
         roots[1] = PDPService.RootData(Cids.Cid(abi.encodePacked("test2")), 64);
@@ -296,7 +302,7 @@ contract PDPServiceProofSetMutateTest is Test {
     }
     
     function testRemoveBadRootDoesntFail() public {
-        uint256 setId = pdpService.createProofSet();
+        uint256 setId = pdpService.createProofSet(address(recordKeeper));
         PDPService.RootData[] memory roots = new PDPService.RootData[](1);
         roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         pdpService.addRoots(setId, roots);
@@ -614,11 +620,13 @@ import "../src/PDPService.sol";
 
 contract SumTreeAddTest is Test {
     SumTreeInternalTestPDPService pdpService;
+    PDPRecordKeeper recordKeeper;
     uint256 testSetId;
 
     function setUp() public {
         pdpService = new SumTreeInternalTestPDPService(100); // Assuming 100 as challengeFinality
-        testSetId = pdpService.createProofSet();
+        recordKeeper = new PDPRecordKeeper(address(pdpService));
+        testSetId = pdpService.createProofSet(address(recordKeeper));
     }
 
     function testMultiAdd() public {
@@ -706,7 +714,7 @@ contract SumTreeAddTest is Test {
     }
 
     function testBatchedRemoveRootsOnlyOwner() public {
-        uint256 setId = pdpService.createProofSet();
+        uint256 setId = pdpService.createProofSet(address(recordKeeper));
         Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test"));
         PDPService.RootData[] memory rootDataArray = new PDPService.RootData[](1);
         rootDataArray[0] = PDPService.RootData(testCid, 100 * pdpService.LEAF_SIZE());
