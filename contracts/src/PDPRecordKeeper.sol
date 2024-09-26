@@ -4,9 +4,10 @@ pragma solidity ^0.8.13;
 // PDPRecordKeeper is a default implementation of a record keeper for the PDP service.
 // It maintains a record of all events that have occurred in the PDP service,
 // and provides a way to query these events.
+// This contract only supports one PDP service caller, set in the constructor.
 contract PDPRecordKeeper {
     // The address of the PDP service contract that is allowed to call this contract
-    address public pdpServiceAddress;
+    address public immutable pdpServiceAddress;
 
     // Enum to represent different types of operations
     enum OperationType {
@@ -27,10 +28,11 @@ contract PDPRecordKeeper {
     // Mapping to store events for each proof set
     mapping(uint256 => EventRecord[]) public proofSetEvents;
 
-    // Event emitted when a new record is added
+    // Eth event emitted when a new record is added
     event RecordAdded(uint256 indexed proofSetId, uint64 epoch, OperationType operationType);
 
     constructor(address _pdpServiceAddress) {
+        require(_pdpServiceAddress != address(0), "PDP service address cannot be zero");
         pdpServiceAddress = _pdpServiceAddress;
     }
 
@@ -45,7 +47,7 @@ contract PDPRecordKeeper {
         uint256 proofSetId,
         uint64 epoch,
         OperationType operationType,
-        bytes memory extraData
+        bytes calldata extraData
     ) external onlyPDPService {
         EventRecord memory newRecord = EventRecord({
             epoch: epoch,
@@ -72,7 +74,7 @@ contract PDPRecordKeeper {
     }
 
     // Function to get all events for a proof set
-    function getAllEvents(uint256 proofSetId) external view returns (EventRecord[] memory) {
+    function listEvents(uint256 proofSetId) external view returns (EventRecord[] memory) {
         return proofSetEvents[proofSetId];
     }
 }

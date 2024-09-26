@@ -13,7 +13,7 @@ contract PDPRecordKeeperTest is Test {
         recordKeeper = new PDPRecordKeeper(pdpServiceAddress);
     }
 
-    function testInitialState() public {
+    function testInitialState() public view {
         assertEq(recordKeeper.pdpServiceAddress(), pdpServiceAddress, "PDP service address should be set correctly");
     }
 
@@ -34,7 +34,7 @@ contract PDPRecordKeeperTest is Test {
         assertEq(eventRecord.extraData, extraData, "Recorded extra data should match");
     }
 
-    function testGetAllEvents() public {
+    function testListEvents() public {
         uint256 proofSetId = 1;
         uint64 epoch1 = 100;
         uint64 epoch2 = 200;
@@ -46,7 +46,7 @@ contract PDPRecordKeeperTest is Test {
         recordKeeper.addRecord(proofSetId, epoch1, operationType1, extraData1);
         recordKeeper.addRecord(proofSetId, epoch2, operationType2, extraData2);
 
-        PDPRecordKeeper.EventRecord[] memory events = recordKeeper.getAllEvents(proofSetId);
+        PDPRecordKeeper.EventRecord[] memory events = recordKeeper.listEvents(proofSetId);
 
         assertEq(events.length, 2, "Should have 2 events");
         assertEq(events[0].epoch, epoch1, "First event epoch should match");
