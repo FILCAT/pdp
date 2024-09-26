@@ -304,6 +304,7 @@ contract PDPService {
     function provePossession(uint256 setId, Proof[] calldata proofs) public {
         uint256 challengeEpoch = nextChallengeEpoch[setId];
         require(block.number >= challengeEpoch, "premature proof");
+        require(proofs.length > 0, "empty proof");
 
         // TODO: fetch proper seed from chain randomness, https://github.com/FILCAT/pdp/issues/44
         uint256 seed = challengeEpoch;
