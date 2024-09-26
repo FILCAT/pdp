@@ -17,7 +17,7 @@ contract MerkleProveTest is Test {
 
     function testVerifyTreeTwoLeaves() public view {
         bytes32[] memory leaves = ProofUtil.generateLeaves(2);
-        bytes32[][] memory tree = MerkleProve.buildMerkleTree(leaves);
+        bytes32[][] memory tree = MerkleProve.buildTree(leaves);
         bytes32 root = tree[0][0];
 
         for (uint i = 0; i < leaves.length; i++) {
@@ -29,7 +29,7 @@ contract MerkleProveTest is Test {
 
     function testVerifyTreeThreeLeaves() public view {
         bytes32[] memory leaves = ProofUtil.generateLeaves(3);
-        bytes32[][] memory tree = MerkleProve.buildMerkleTree(leaves);
+        bytes32[][] memory tree = MerkleProve.buildTree(leaves);
         bytes32 root = tree[0][0];
 
         for (uint i = 0; i < leaves.length; i++) {
@@ -47,7 +47,7 @@ contract MerkleProveTest is Test {
     function testVerifyTreesManyLeaves() public view {
         for (uint256 width = 4; width < 60; width++) {
             bytes32[] memory leaves = ProofUtil.generateLeaves(width);
-            bytes32[][] memory tree = MerkleProve.buildMerkleTree(leaves);
+            bytes32[][] memory tree = MerkleProve.buildTree(leaves);
             bytes32 root = tree[0][0];
 
             // Verify proof for each leaf
@@ -79,7 +79,7 @@ contract MerkleProveTest is Test {
         // Build payload of of 2KiB of zeros, packed into bytes32 words
         bytes32[] memory payload = new bytes32[](2048 / 32);
 
-        bytes32[][] memory tree = MerkleProve.buildMerkleTree(payload);
+        bytes32[][] memory tree = MerkleProve.buildTree(payload);
         assertEq(tree[0][0], expected);
     }
 
@@ -130,7 +130,7 @@ contract MerkleProveTest is Test {
     function testZeroTreeFilecoinEquivalence() public view {
         for (uint i = 1; i <= 16; i++) {
             bytes32[] memory leaves = new bytes32[](i);
-            bytes32[][] memory tree = MerkleProve.buildMerkleTree(leaves);
+            bytes32[][] memory tree = MerkleProve.buildTree(leaves);
             uint256 height = 256 - BitOps.clz(i - 1);
             assertEq(tree[0][0], MerkleVerify.zeroRoot(height));
         }

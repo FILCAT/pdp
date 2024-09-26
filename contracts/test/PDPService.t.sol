@@ -327,7 +327,7 @@ contract PDPServiceProofTest is Test {
 
     function testProveSingleRoot() public {
         uint leafCount = 10;
-        bytes32[][] memory tree = makeTree(leafCount);
+        bytes32[][] memory tree = ProofUtil.makeTree(leafCount);
         // console.log("root          ", vm.toString(tree[0][0]));
 
         // Create new proof set and add root.
@@ -361,9 +361,9 @@ contract PDPServiceProofTest is Test {
         bytes32[][][] memory trees = new bytes32[][][](rootCount);
         PDPService.RootData[] memory roots = new PDPService.RootData[](rootCount);
         for (uint i = 0; i < rootCount; i++) {
-            // Generate different size trees up to max leaves.
+            // Generate a uniquely-sized tree for each root (up to some small maximum size).
             leafCounts[i] = uint256(sha256(abi.encode(i))) % 64;
-            trees[i] = makeTree(leafCounts[i]);
+            trees[i] = ProofUtil.makeTree(leafCounts[i]);
             roots[i] = makeRoot(trees[i], leafCounts[i]);
         }
 
@@ -384,12 +384,7 @@ contract PDPServiceProofTest is Test {
         assertEq(pdpService.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
     }
 
-    // Builds a Merkle tree over data that is a sequence of distinct leaf values.
-    function makeTree(uint leafCount) internal view returns (bytes32[][] memory) {
-        bytes32[] memory data = ProofUtil.generateLeaves(leafCount);
-        bytes32[][] memory tree = MerkleProve.buildMerkleTree(data);
-        return tree;
-    }
+    ///// Helpers /////
 
     // Constructs a RootData structure for a Merkle tree.
     function makeRoot(bytes32[][] memory tree, uint leafCount) internal pure returns (PDPService.RootData memory) {
@@ -416,9 +411,10 @@ contract PDPServiceProofTest is Test {
             uint treeIdx = 0;
             uint256 treeOffset = 0;
             for (uint i = 0; i < leafCounts.length; ++i) {
-                if (leafCounts[i] >= challengeOffset) {
+                if (leafCounts[i] > challengeOffset) {
                     treeIdx = i;
                     treeOffset = challengeOffset;
+                    break;
                 } else {
                     challengeOffset -= leafCounts[i];
                 }

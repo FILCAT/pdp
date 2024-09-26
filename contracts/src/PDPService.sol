@@ -305,7 +305,7 @@ contract PDPService {
         uint256 challengeEpoch = nextChallengeEpoch[setId];
         require(block.number >= challengeEpoch, "premature proof");
 
-        // TODO: fetch proper seed from chain randomness
+        // TODO: fetch proper seed from chain randomness, https://github.com/FILCAT/pdp/issues/44
         uint256 seed = challengeEpoch;
         uint256 leafCount = getProofSetLeafCount(setId);
         uint256 sumTreeTop = 256 - BitOps.clz(nextRootId[setId]);
@@ -324,7 +324,6 @@ contract PDPService {
 
         // Set the next challenge epoch.
         nextChallengeEpoch[setId] = block.number + challengeFinality; 
-        // TODO: record the successful proof somewhere.
     }
 
     /* Sum tree functions */

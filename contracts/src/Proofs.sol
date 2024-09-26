@@ -153,7 +153,7 @@ library MerkleProve {
     // The last array is the leaves, and each prior array is the result of the commutative hash of pairs in the previous array.
     // An unpaired element is paired with the root of a tree of the same height with zero leaves.
     // The first element of the first array is the root.
-    function buildMerkleTree(bytes32[] memory leaves) internal view returns (bytes32[][] memory) {
+    function buildTree(bytes32[] memory leaves) internal view returns (bytes32[][] memory) {
         require(leaves.length > 0, "Leaves array must not be empty");
 
         uint256 levels = 256 - BitOps.clz(leaves.length - 1);
