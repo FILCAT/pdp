@@ -150,7 +150,7 @@ library MerkleVerify {
 library MerkleProve {
     // Builds a merkle tree from an array of leaves.
     // The tree is an array of arrays of bytes32.
-    // The last array is the leaves, and each prior array is the result of the commutative hash of pairs in the previous array.
+    // The last array is the leaves, and each prior array is the result of the hash of pairs in the previous array.
     // An unpaired element is paired with the root of a tree of the same height with zero leaves.
     // The first element of the first array is the root.
     function buildTree(bytes32[] memory leaves) internal view returns (bytes32[][] memory) {
