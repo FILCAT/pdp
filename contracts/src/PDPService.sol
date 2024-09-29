@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import {BitOps} from "../src/BitOps.sol";
 import {Cids} from "../src/Cids.sol";
 import {MerkleVerify} from "../src/Proofs.sol";
+import {PDPRecordKeeper} from "../src/PDPRecordKeeper.sol";
 
 contract PDPService {
     // Constants
@@ -28,7 +29,8 @@ contract PDPService {
         uint256 leafCount;
         address owner;
         nextRootID uint64;
-        nextChallengeEpoch: uint64
+        nextChallengeEpoch: uint64;
+        recordKeeper: address;
     }
     ** PDP service contract tracks many possible proof sets **
     []ProofSet proofsets
@@ -53,10 +55,12 @@ contract PDPService {
     mapping(uint256 => uint256) nextRootId;
     mapping(uint256 => uint256) proofSetLeafCount;
     mapping(uint256 => uint256) nextChallengeEpoch;
+    mapping(uint256 => address) proofSetRecordKeeper;
     // ownership of proof set is initialized upon creation to create message sender 
     // proofset owner has exclusive permission to add and remove roots and delete the proof set
     mapping(uint256 => address) proofSetOwner;
     mapping(uint256 => address) proofSetProposedOwner;
+    
 
     // Methods
     constructor(uint256 _challengeFinality) {
@@ -143,11 +147,15 @@ contract PDPService {
     // A proof set is created empty, with no roots. Creation yields a proof set ID 
     // for referring to the proof set later.
     // Sender of create message is proof set owner.
-    function createProofSet() public returns (uint256) {
+    function createProofSet(address recordKeeper) public returns (uint256) {
         uint256 setId = nextProofSetId++;
         proofSetLeafCount[setId] = 0;
         nextChallengeEpoch[setId] = 0;  // Re-initialized when the first root is added.
         proofSetOwner[setId] = msg.sender;
+        proofSetRecordKeeper[setId] = recordKeeper;
+
+        bytes memory extraData = abi.encode(msg.sender);
+        _addRecord(setId, recordKeeper, PDPRecordKeeper.OperationType.CREATE, extraData);
         return setId;
     }
 
@@ -158,10 +166,13 @@ contract PDPService {
         }
 
         require(proofSetOwner[setId] == msg.sender, "Only the owner can delete proof sets");
-
+        uint256 deletedLeafCount = proofSetLeafCount[setId];
         proofSetLeafCount[setId] = 0;
         proofSetOwner[setId] = address(0);
         nextChallengeEpoch[setId] = 0;
+
+        bytes memory extraData = abi.encode(deletedLeafCount);
+        _addRecord(setId, proofSetRecordKeeper[setId], PDPRecordKeeper.OperationType.DELETE, extraData);
     }
 
     // Struct for tracking root data
@@ -184,6 +195,9 @@ contract PDPService {
         if (needsChallengeEpoch) {
             nextChallengeEpoch[setId] = block.number + challengeFinality; 
         }
+
+        bytes memory extraData = abi.encode(firstAdded, rootData);
+        _addRecord(setId, proofSetRecordKeeper[setId], PDPRecordKeeper.OperationType.ADD, extraData);
         return firstAdded;
     }
 
@@ -226,6 +240,9 @@ contract PDPService {
         if (proofSetLeafCount[setId] == 0) {
             nextChallengeEpoch[setId] = 0;
         }
+
+        bytes memory extraData = abi.encode(totalDelta, rootIds);
+        _addRecord(setId, proofSetRecordKeeper[setId], PDPRecordKeeper.OperationType.REMOVE, extraData);
         return totalDelta;
     }
 
@@ -311,6 +328,7 @@ contract PDPService {
         uint256 leafCount = getProofSetLeafCount(setId);
         uint256 sumTreeTop = 256 - BitOps.clz(nextRootId[setId]);
 
+
         for (uint64 i = 0; i < proofs.length; i++) {
             // Hash (SHA3) the seed,  proof set id, and proof index to create challenge.
             bytes memory payload = abi.encodePacked(seed, setId, i);
@@ -325,6 +343,8 @@ contract PDPService {
 
         // Set the next challenge epoch.
         nextChallengeEpoch[setId] = block.number + challengeFinality; 
+        bytes memory extraData = abi.encode(proofSetLeafCount[setId], seed);
+        _addRecord(setId, proofSetRecordKeeper[setId], PDPRecordKeeper.OperationType.PROVE_POSSESSION, extraData);
     }
 
     /* Sum tree functions */
@@ -387,6 +407,12 @@ contract PDPService {
     // Calculated by taking the trailing zeros of 1 plus the index
     function heightFromIndex(uint256 index) internal pure returns (uint256) {
         return BitOps.ctz(index + 1);
+    }
+
+    /* Record keeper functions */
+    function _addRecord(uint256 proofSetId, address recordKeeper, PDPRecordKeeper.OperationType operationType, bytes memory extraData) internal {
+        require(address(recordKeeper) != address(0), "Record keeper must be set");
+        PDPRecordKeeper(recordKeeper).addRecord(proofSetId, uint64(block.number), operationType, extraData);
     }
 
 }
