@@ -343,7 +343,7 @@ contract PDPService {
 
         // Set the next challenge epoch.
         nextChallengeEpoch[setId] = block.number + challengeFinality; 
-        bytes memory extraData = abi.encode(seed);
+        bytes memory extraData = abi.encode(proofSetLeafCount[setId], seed);
         _addRecord(setId, proofSetRecordKeeper[setId], PDPRecordKeeper.OperationType.PROVE_POSSESSION, extraData);
     }
 

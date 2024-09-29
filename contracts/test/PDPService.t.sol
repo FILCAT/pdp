@@ -961,7 +961,7 @@ contract RecordKeeperHelper is Test {
             require(rootIds.length > 0, "REMOVE: rootIds should not be empty");
             require(totalDelta > 0, "REMOVE: totalDelta should be > 0");
         } else if (operationType == PDPRecordKeeper.OperationType.PROVE_POSSESSION) {
-            abi.decode(extraData, (uint256));
+            abi.decode(extraData, (uint256, uint256));
         } else if (operationType == PDPRecordKeeper.OperationType.DELETE) {
             abi.decode(extraData, (uint256));
         } else {
