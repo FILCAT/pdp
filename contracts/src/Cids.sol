@@ -8,7 +8,7 @@ library Cids {
     }
 
     // Returns the last 32 bytes of a CID payload as a bytes32.
-    function digestFromCid(Cid memory cid) public pure returns (bytes32) {
+    function digestFromCid(Cid memory cid) internal pure returns (bytes32) {
         require(cid.data.length >= 32, "Cid data is too short");
         bytes memory dataSlice = new bytes(32);
         for (uint i = 0; i < 32; i++) {

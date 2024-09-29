@@ -8,15 +8,15 @@ if [ -z "$RPC_URL" ] || [ -z "$KEYSTORE" ] ; then
 fi
 
 # Get the contract address from the command line argument
-if [ -z "$1" ]; then
-    echo "Usage: $0 <contract_address>"
+if [ -z "$1" ] || [ -z "$2" ]; then
+    echo "Usage: $0 <contract_address> <record_keeper_address>"
     exit 1
 fi
 
 CONTRACT_ADDRESS=$1
 
 # Create the calldata for createProofSet()
-CALLDATA=$(cast calldata "createProofSet()(uint256)")
+CALLDATA=$(cast calldata "createProofSet(address)(uint256)" $2)
 
 # Send the transaction
 cast send --keystore $KEYSTORE --password "$PASSWORD" --rpc-url $RPC_URL $CONTRACT_ADDRESS $CALLDATA

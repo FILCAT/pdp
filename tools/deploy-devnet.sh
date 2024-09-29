@@ -21,5 +21,19 @@ fi
 clientAddr=$(cat $KEYSTORE | jq '.address' | sed -e 's/\"//g')
 echo "Sending funds to $clientAddr"
 lotus send $clientAddr 10000
-echo "Creating contract"
-forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --compiler-version 0.8.20 --chain-id 31415926 contracts/src/PDPService.sol:PDPService --constructor-args 3
+
+# Deploy PDP service contract
+echo "Deploying PDP service"
+# Parse the output of forge create to extract the contract address
+PDP_SERVICE_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --compiler-version 0.8.20 --chain-id 31415926 contracts/src/PDPService.sol:PDPService --constructor-args 3 | grep "Deployed to" | awk '{print $3}')
+
+if [ -z "$PDP_SERVICE_ADDRESS" ]; then
+    echo "Error: Failed to extract PDP service contract address"
+    exit 1
+fi
+
+echo "PDP service deployed at: $PDP_SERVICE_ADDRESS"
+
+# Deploy PDP Record keeper 
+echo "Deploying record keeper"
+forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --compiler-version 0.8.20 --chain-id 31415926 contracts/src/PDPRecordKeeper.sol:PDPRecordKeeper --constructor-args $PDP_SERVICE_ADDRESS
