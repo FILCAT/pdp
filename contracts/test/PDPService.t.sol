@@ -374,7 +374,7 @@ contract PDPServiceProofTest is Test {
         recordAssert = new RecordKeeperHelper(address(recordKeeper));
     }
 
-    function tearDown() public {
+    function tearDown() public view {
         recordAssert.assertAllRecords();
     }
 
@@ -957,12 +957,13 @@ contract RecordKeeperHelper is Test {
         } else if (operationType == PDPRecordKeeper.OperationType.ADD) {
             abi.decode(extraData, (uint256,PDPService.RootData[]));
         } else if (operationType == PDPRecordKeeper.OperationType.REMOVE) {
-            (uint256[] memory rootIds) = abi.decode(extraData, (uint256[]));
+            (uint256 totalDelta, uint256[] memory rootIds) = abi.decode(extraData, (uint256, uint256[]));
             require(rootIds.length > 0, "REMOVE: rootIds should not be empty");
+            require(totalDelta > 0, "REMOVE: totalDelta should be > 0");
         } else if (operationType == PDPRecordKeeper.OperationType.PROVE_POSSESSION) {
             abi.decode(extraData, (uint256));
         } else if (operationType == PDPRecordKeeper.OperationType.DELETE) {
-            require(extraData.length == 0, "DELETE: extraData should be empty");
+            abi.decode(extraData, (uint256));
         } else {
             revert("Unknown operation type");
         }

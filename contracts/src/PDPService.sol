@@ -166,12 +166,13 @@ contract PDPService {
         }
 
         require(proofSetOwner[setId] == msg.sender, "Only the owner can delete proof sets");
-
+        uint256 deletedLeafCount = proofSetLeafCount[setId];
         proofSetLeafCount[setId] = 0;
         proofSetOwner[setId] = address(0);
         nextChallengeEpoch[setId] = 0;
 
-        _addRecord(setId, proofSetRecordKeeper[setId], PDPRecordKeeper.OperationType.DELETE, bytes(""));
+        bytes memory extraData = abi.encode(deletedLeafCount);
+        _addRecord(setId, proofSetRecordKeeper[setId], PDPRecordKeeper.OperationType.DELETE, extraData);
     }
 
     // Struct for tracking root data
@@ -240,7 +241,7 @@ contract PDPService {
             nextChallengeEpoch[setId] = 0;
         }
 
-        bytes memory extraData = abi.encode(rootIds);
+        bytes memory extraData = abi.encode(totalDelta, rootIds);
         _addRecord(setId, proofSetRecordKeeper[setId], PDPRecordKeeper.OperationType.REMOVE, extraData);
         return totalDelta;
     }
@@ -410,6 +411,7 @@ contract PDPService {
 
     /* Record keeper functions */
     function _addRecord(uint256 proofSetId, address recordKeeper, PDPRecordKeeper.OperationType operationType, bytes memory extraData) internal {
+        require(address(recordKeeper) != address(0), "Record keeper must be set");
         PDPRecordKeeper(recordKeeper).addRecord(proofSetId, uint64(block.number), operationType, extraData);
     }
 
