@@ -154,7 +154,8 @@ contract PDPService {
         proofSetOwner[setId] = msg.sender;
         proofSetRecordKeeper[setId] = recordKeeper;
 
-        _addRecord(setId, recordKeeper, PDPRecordKeeper.OperationType.CREATE, bytes(""));
+        bytes memory extraData = abi.encode(msg.sender);
+        _addRecord(setId, recordKeeper, PDPRecordKeeper.OperationType.CREATE, extraData);
         return setId;
     }
 
@@ -194,7 +195,7 @@ contract PDPService {
             nextChallengeEpoch[setId] = block.number + challengeFinality; 
         }
 
-        bytes memory extraData = abi.encode(rootData.length, firstAdded, rootData);
+        bytes memory extraData = abi.encode(firstAdded, rootData);
         _addRecord(setId, proofSetRecordKeeper[setId], PDPRecordKeeper.OperationType.ADD, extraData);
         return firstAdded;
     }
@@ -239,7 +240,7 @@ contract PDPService {
             nextChallengeEpoch[setId] = 0;
         }
 
-        bytes memory extraData = abi.encode(rootIds.length, totalDelta, rootIds);
+        bytes memory extraData = abi.encode(rootIds);
         _addRecord(setId, proofSetRecordKeeper[setId], PDPRecordKeeper.OperationType.REMOVE, extraData);
         return totalDelta;
     }
@@ -326,6 +327,7 @@ contract PDPService {
         uint256 leafCount = getProofSetLeafCount(setId);
         uint256 sumTreeTop = 256 - BitOps.clz(nextRootId[setId]);
 
+
         for (uint64 i = 0; i < proofs.length; i++) {
             // Hash (SHA3) the seed,  proof set id, and proof index to create challenge.
             bytes memory payload = abi.encodePacked(seed, setId, i);
@@ -340,10 +342,8 @@ contract PDPService {
 
         // Set the next challenge epoch.
         nextChallengeEpoch[setId] = block.number + challengeFinality; 
-        // TODO add in call to record keeper on successful proof 
-        // we should pass in the rootIds that were challenged
-        // bytes memory extraData = abi.encode(provenRootIds);
-        //_addRecord(setId, proofSetRecordKeeper[setId], PDPRecordKeeper.OperationType.PROVE_POSSESSION, extraData);
+        bytes memory extraData = abi.encode(seed);
+        _addRecord(setId, proofSetRecordKeeper[setId], PDPRecordKeeper.OperationType.PROVE_POSSESSION, extraData);
     }
 
     /* Sum tree functions */

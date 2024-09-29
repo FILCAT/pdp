@@ -11,6 +11,7 @@ contract PDPRecordKeeper {
 
     // Enum to represent different types of operations
     enum OperationType {
+        NONE,
         CREATE,
         ADD,
         REMOVE,
