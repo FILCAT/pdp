@@ -5,6 +5,59 @@ import {BitOps} from "../src/BitOps.sol";
 import {Cids} from "../src/Cids.sol";
 import {MerkleVerify} from "../src/Proofs.sol";
 import {PDPRecordKeeper} from "../src/PDPRecordKeeper.sol";
+import {Ownable} from "../lib/openzeppelin-contracts/contracts/access/Ownable.sol";
+
+// We could make this a singleton that registers proof sets  
+// but for this spike just keep it very simple -- one SLA contrat per proof set
+contract PDPSLA is Ownable {
+    uint256 lastChallengedLeaf;
+    uint256 untrackedLeafCount;
+    uint256[] enqueuedRemovals;
+    uint256 setId;
+    PDPService pdpService;
+
+    // Owner is allowed to add, remove and prove 
+    // Maybe "owner" is the wrong word, its the PDP service proving party
+    constructor(uint256 _setId, address _pdpService) Ownable(msg.sender) {
+        setId = _setId;
+        pdpService = PDPService(_pdpService);
+    }
+
+    function addRoots(PDPService.RootData[] calldata rootData) public onlyOwner {
+        for (uint256 i = 0; i < rootData.length; i++) {
+            untrackedLeafCount += rootData[i].rawSize / pdpService.LEAF_SIZE();
+        }
+        pdpService.addRoots(setId, rootData);
+    }
+
+    function removeRoots(uint256[] calldata rootIds) public onlyOwner {
+        for (uint256 i = 0; i < rootIds.length; i++) {
+            enqueuedRemovals.push(rootIds[i]);
+        }
+    }
+
+    function provePossession(PDPService.Proof[] calldata proofs) public onlyOwner {
+        // Prove possession
+        pdpService.provePossession(setId, proofs, lastChallengedLeaf);
+
+        // Remove enqueued removals from proof set
+        uint256[] memory removalsToProcess = new uint256[](enqueuedRemovals.length);
+        uint256 lengthToRemove = enqueuedRemovals.length;
+        for (uint256 i = 0; i < lengthToRemove; i++) {
+            removalsToProcess[i] = enqueuedRemovals[lengthToRemove - 1 - i];
+            enqueuedRemovals.pop();
+        }
+        uint256 removedLeafCount = pdpService.removeRoots(setId, removalsToProcess);
+
+        // Update last challenged leaf
+        lastChallengedLeaf -= removedLeafCount;
+        lastChallengedLeaf += untrackedLeafCount;
+        untrackedLeafCount = 0;
+    }
+
+
+}
+
 
 contract PDPService {
     // Constants
@@ -56,11 +109,16 @@ contract PDPService {
     mapping(uint256 => uint256) proofSetLeafCount;
     mapping(uint256 => uint256) nextChallengeEpoch;
     mapping(uint256 => address) proofSetRecordKeeper;
+    mapping(uint256 => PDPSLA) proofSetSLA;
     // ownership of proof set is initialized upon creation to create message sender 
     // proofset owner has exclusive permission to add and remove roots and delete the proof set
     mapping(uint256 => address) proofSetOwner;
     mapping(uint256 => address) proofSetProposedOwner;
     
+    modifier onlySLA(uint256 setId) {
+        require(msg.sender == address(proofSetSLA[setId]), "Only SLA can call this function");
+        _;
+    }
 
     // Methods
     constructor(uint256 _challengeFinality) {
@@ -105,12 +163,6 @@ contract PDPService {
         return nextChallengeEpoch[setId];
     }
 
-    // Returns the owner of a proof set and the proposed owner if any
-    function getProofSetOwner(uint256 setId) public view returns (address, address) {
-        require(proofSetLive(setId), "Proof set not live");
-        return (proofSetOwner[setId], proofSetProposedOwner[setId]);
-    }
-
     // Returns the root CID for a given proof set and root ID
     function getRootCid(uint256 setId, uint256 rootId) public view returns (Cids.Cid memory) {
         require(proofSetLive(setId), "Proof set not live");
@@ -123,36 +175,15 @@ contract PDPService {
         return rootLeafCounts[setId][rootId];
     }
 
-    // owner proposes new owner.  If the owner proposes themself delete any outstanding proposed owner
-    function proposeProofSetOwner(uint256 setId, address newOwner) public {
-        require(proofSetLive(setId), "Proof set not live");
-        address owner = proofSetOwner[setId];
-        require(owner == msg.sender, "Only the current owner can propose a new owner");
-        if (owner == newOwner) {
-            // If the owner proposes themself delete any outstanding proposed owner
-            delete proofSetProposedOwner[setId];
-        } else {
-            proofSetProposedOwner[setId] = newOwner;
-        }
-    }
-
-    function claimProofSetOwnership(uint256 setId) public {
-        require(proofSetLive(setId), "Proof set not live");
-        require(proofSetProposedOwner[setId] == msg.sender, "Only the proposed owner can claim ownership");
-        proofSetOwner[setId] = msg.sender;
-        delete proofSetProposedOwner[setId];
-    }
-
-
     // A proof set is created empty, with no roots. Creation yields a proof set ID 
     // for referring to the proof set later.
     // Sender of create message is proof set owner.
-    function createProofSet(address recordKeeper) public returns (uint256) {
+    function createProofSet(address recordKeeper, address sla) public returns (uint256) {
         uint256 setId = nextProofSetId++;
         proofSetLeafCount[setId] = 0;
         nextChallengeEpoch[setId] = 0;  // Re-initialized when the first root is added.
-        proofSetOwner[setId] = msg.sender;
         proofSetRecordKeeper[setId] = recordKeeper;
+        proofSetSLA[setId] = PDPSLA(sla);
 
         bytes memory extraData = abi.encode(msg.sender);
         _addRecord(setId, recordKeeper, PDPRecordKeeper.OperationType.CREATE, extraData);
@@ -181,7 +212,7 @@ contract PDPService {
         uint256 rawSize;
     }
 
-    function addRoots(uint256 setId, RootData[] calldata rootData) public returns (uint256) {
+    function addRoots(uint256 setId, RootData[] calldata rootData) public onlySLA(setId) returns (uint256) {
         require(proofSetLive(setId), "Proof set not live");
         require(rootData.length > 0, "Must add at least one root");
         require(proofSetOwner[setId] == msg.sender, "Only the owner can add roots");
@@ -227,7 +258,7 @@ contract PDPService {
 
     // removeRoots removes a batch of roots from a proof set.  Must be called by the proof set owner.
     // returns the total removed leaf count
-    function removeRoots(uint256 setId, uint256[] calldata rootIds) public returns (uint256){
+    function removeRoots(uint256 setId, uint256[] calldata rootIds) public onlySLA(setId) returns (uint256){
         require(proofSetOwner[setId] == msg.sender, "Only the owner can remove roots");
         require(proofSetLive(setId), "Proof set not live");
         uint256 totalDelta = 0;
@@ -318,14 +349,14 @@ contract PDPService {
     // proof set Merkle roots at some epoch. The challenge seed is determined 
     // by the epoch of the previous proof of possession.
     // Note that this method is not restricted to the proof set owner.
-    function provePossession(uint256 setId, Proof[] calldata proofs) public {
+    function provePossession(uint256 setId, Proof[] calldata proofs, uint256 lastChallengedLeaf) public onlySLA(setId) {
         uint256 challengeEpoch = nextChallengeEpoch[setId];
         require(block.number >= challengeEpoch, "premature proof");
         require(proofs.length > 0, "empty proof");
 
         // TODO: fetch proper seed from chain randomness, https://github.com/FILCAT/pdp/issues/44
         uint256 seed = challengeEpoch;
-        uint256 leafCount = getProofSetLeafCount(setId);
+        uint256 leafCount = lastChallengedLeaf;
         uint256 sumTreeTop = 256 - BitOps.clz(nextRootId[setId]);
 
 
