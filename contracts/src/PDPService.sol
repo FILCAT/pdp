@@ -53,7 +53,9 @@ contract PDPService {
         address owner;
         nextRootID uint64;
         nextChallengeEpoch: uint64;
-        : address;
+        listenerAddress: address;
+        lastChallengedLeaf: uint256
+        enqueuedRemovals: uint256[]
     }
     ** PDP service contract tracks many possible proof sets **
     []ProofSet proofsets
@@ -80,6 +82,8 @@ contract PDPService {
     mapping(uint256 => uint256) nextChallengeEpoch;
     // Each proof set notifies a configurable listener to implement extensible applications managing data storage
     mapping(uint256 => address) proofSetListener;
+    mapping(uint256 => uint256) lastChallengedLeaf;
+    mapping(uint256 => uint256[]) enqueuedRemovals;
     // ownership of proof set is initialized upon creation to create message sender 
     // proofset owner has exclusive permission to add and remove roots and delete the proof set
     mapping(uint256 => address) proofSetOwner;
@@ -217,9 +221,10 @@ contract PDPService {
         for (uint256 i = 0; i < rootData.length; i++) {
             addOneRoot(setId, i, rootData[i].root, rootData[i].rawSize);
         }
-        // Initialise the first challenge epoch when the first data is added.
+        // Initialise the first challenge epoch and challengeable leaf range when the first data is added.
         if (needsChallengeEpoch) {
             nextChallengeEpoch[setId] = block.number + challengeFinality; 
+            lastChallengedLeaf[setId] = proofSetLeafCount[setId];
         }
 
         bytes memory extraData = abi.encode(firstAdded, rootData);
@@ -253,9 +258,15 @@ contract PDPService {
         return rootId;
     }
 
+    function enqueueRemovals(uint256 setId, uint256[] calldata rootIds) public {
+        for (uint256 i = 0; i < rootIds.length; i++){
+            enqueuedRemovals[setId].push(rootIds[i]);
+        }
+    }
+
     // removeRoots removes a batch of roots from a proof set.  Must be called by the proof set owner.
     // returns the total removed leaf count
-    function removeRoots(uint256 setId, uint256[] calldata rootIds) public returns (uint256){
+    function removeRoots(uint256 setId, uint256[] memory rootIds) internal returns (uint256){
         require(proofSetOwner[setId] == msg.sender, "Only the owner can remove roots");
         require(proofSetLive(setId), "Proof set not live");
         uint256 totalDelta = 0;
@@ -343,6 +354,25 @@ contract PDPService {
         bytes32[] proof;
     }
 
+    function proveAndUpdate(uint256 setId, Proof[] calldata proofs) public {
+        // Prove 
+        provePossession(setId, proofs);
+
+        // Take removed roots out of proving set
+        uint256[] storage removals = enqueuedRemovals[setId];
+        uint256[] memory removalsToProcess = new uint256[](removals.length);
+    
+        for (uint256 i = 0; i < removals.length; i++) {
+            removalsToProcess[i] = removals[removals.length - 1 - i];
+            removals.pop();
+        }
+    
+        removeRoots(setId, removalsToProcess);
+
+        // Bring added roots into proving set 
+        lastChallengedLeaf[setId] = proofSetLeafCount[setId];
+    }
+
     // Verifies and records that the provider proved possession of the 
     // proof set Merkle roots at some epoch. The challenge seed is determined 
     // by the epoch of the previous proof of possession.
@@ -354,7 +384,7 @@ contract PDPService {
 
         // TODO: fetch proper seed from chain randomness, https://github.com/FILCAT/pdp/issues/44
         uint256 seed = challengeEpoch;
-        uint256 leafCount = getProofSetLeafCount(setId);
+        uint256 leafCount = lastChallengedLeaf[setId];
         uint256 sumTreeTop = 256 - BitOps.clz(nextRootId[setId]);
 
 
