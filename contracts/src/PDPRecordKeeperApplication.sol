@@ -1,15 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 
-// PDPRecordKeeper is a default implementation of a record keeper for the PDP service.
-// It maintains a record of all events that have occurred in the PDP service,
-// and provides a way to query these events.
-// This contract only supports one PDP service caller, set in the constructor.
-contract PDPRecordKeeper {
-    // The address of the PDP service contract that is allowed to call this contract
-    address public immutable pdpServiceAddress;
+import {PDPService} from "./PDPService.sol";
 
-    // Enum to represent different types of operations
+interface PDPApplication {
     enum OperationType {
         NONE,
         CREATE,
@@ -19,10 +13,26 @@ contract PDPRecordKeeper {
         DELETE
     }
 
+    function notify(
+        uint256 proofSetId,
+        uint64 epoch,
+        OperationType operationType,
+        bytes calldata extraData
+    ) external;
+}
+
+// PDPRecordKeeperApplication is a default implementation of a PDP Application.
+// It maintains a record of all events that have occurred in the PDP service,
+// and provides a way to query these events.
+// This contract only supports one PDP service caller, set in the constructor.
+contract PDPRecordKeeperApplication is PDPApplication {
+    // The address of the PDP service contract that is allowed to call this contract
+    address public immutable pdpServiceAddress;
+
     // Struct to store event details
     struct EventRecord {
         uint64 epoch;
-        OperationType operationType;
+        PDPApplication.OperationType operationType;
         bytes extraData;
     }
 
@@ -30,7 +40,7 @@ contract PDPRecordKeeper {
     mapping(uint256 => EventRecord[]) public proofSetEvents;
 
     // Eth event emitted when a new record is added
-    event RecordAdded(uint256 indexed proofSetId, uint64 epoch, OperationType operationType);
+    event RecordAdded(uint256 indexed proofSetId, uint64 epoch, PDPApplication.OperationType operationType);
 
     constructor(address _pdpServiceAddress) {
         require(_pdpServiceAddress != address(0), "PDP service address cannot be zero");
@@ -44,10 +54,10 @@ contract PDPRecordKeeper {
     }
 
     // Function to add a new event record
-    function addRecord(
+    function notify(
         uint256 proofSetId,
         uint64 epoch,
-        OperationType operationType,
+        PDPApplication.OperationType operationType,
         bytes calldata extraData
     ) external onlyPDPService {
         EventRecord memory newRecord = EventRecord({
