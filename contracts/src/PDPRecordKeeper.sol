@@ -70,4 +70,17 @@ contract PDPRecordKeeper is PDPListener {
     function listEvents(uint256 proofSetId) external view returns (EventRecord[] memory) {
         return proofSetEvents[proofSetId];
     }
+
+    // SLA specification functions setting values for PDP service providers
+
+    // Max number of epochs between two consecutive proofs
+    function getMaxProvingPeriod() public pure returns (uint64) {
+        return 2880;
+    }
+
+    // Challenges / merkle inclusion proofs provided per proof set
+    function getChallengesPerProof() public pure returns (uint64) {
+        // TODO: don't know this yet
+        return 5;
+    }
 }

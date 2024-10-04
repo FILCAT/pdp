@@ -14,6 +14,16 @@ contract PDPRecordKeeperTest is Test {
         recordKeeper = new PDPRecordKeeper(pdpServiceAddress);
     }
 
+    function testGetMaxProvingPeriod() public view {
+        uint64 maxPeriod = recordKeeper.getMaxProvingPeriod();
+        assertEq(maxPeriod, 2880, "Max proving period should be 2880");
+    }
+
+    function testGetChallengesPerProof() public view{
+        uint64 challenges = recordKeeper.getChallengesPerProof();
+        assertEq(challenges, 5, "Challenges per proof should be 5");
+    }
+
     function testInitialState() public view {
         assertEq(recordKeeper.pdpServiceAddress(), pdpServiceAddress, "PDP service address should be set correctly");
     }
