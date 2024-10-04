@@ -3,6 +3,8 @@ pragma solidity ^0.8.20;
 
 // Library for bit operations.
 library BitOps {
+    // Errors
+    error ExceedsMaximumInt256Value();
     // Calculates the number of leading zeros in binary representation.
     function clz(uint256 x) internal pure returns (uint256) {
         uint256 n = 256;
@@ -30,7 +32,9 @@ library BitOps {
 
     // Calculates the number of trailing zeros in binary representation. 
     function ctz(uint256 x) internal pure returns (uint256) {
-        require(x <= uint256(type(int256).max), "Input exceeds maximum int256 value");
+        if(x > uint256(type(int256).max)) {
+            revert ExceedsMaximumInt256Value();
+        }
         uint256 c = 256; 
 
         int256 v = -int256(x);

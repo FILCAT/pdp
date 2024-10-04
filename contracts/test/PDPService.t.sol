@@ -45,7 +45,7 @@ contract PDPServiceProofSetCreateDeleteTest is Test {
         recordAssert.expectRecord(PDPRecordKeeper.OperationType.CREATE, setId);
         pdpService.deleteProofSet(setId);
         recordAssert.expectRecord(PDPRecordKeeper.OperationType.DELETE, setId);
-        vm.expectRevert("Proof set not live");
+        vm.expectRevert(PDPService.ProofSetNotLive.selector);
         pdpService.getProofSetLeafCount(setId);
         tearDown();
     }
@@ -57,20 +57,20 @@ contract PDPServiceProofSetCreateDeleteTest is Test {
         address nonOwner = address(0x1234);
         // Expect revert when non-owner tries to delete the proof set
         vm.prank(nonOwner);
-        vm.expectRevert("Only the owner can delete proof sets");
+        vm.expectRevert(PDPService.OnlyOwnerCanPerformAction.selector);
         pdpService.deleteProofSet(setId);
 
         // Now verify the owner can delete the proof set
         pdpService.deleteProofSet(setId);
         recordAssert.expectRecord(PDPRecordKeeper.OperationType.DELETE, setId);
-        vm.expectRevert("Proof set not live");
+        vm.expectRevert(PDPService.ProofSetNotLive.selector);
         pdpService.getProofSetOwner(setId);
         tearDown();
     }
 
     // TODO: once we have addRoots we should test deletion of a non empty proof set
     function testCannotDeleteNonExistentProofSet() public {
-        vm.expectRevert("proof set id out of bounds");
+        vm.expectRevert(PDPService.ProofSetIDOutOfBounds.selector);
         pdpService.deleteProofSet(0);
         tearDown();
     }
@@ -80,19 +80,19 @@ contract PDPServiceProofSetCreateDeleteTest is Test {
         recordAssert.expectRecord(PDPRecordKeeper.OperationType.CREATE, setId);
         pdpService.deleteProofSet(setId);
         recordAssert.expectRecord(PDPRecordKeeper.OperationType.DELETE, setId);
-        vm.expectRevert("Only the owner can delete proof sets");
+        vm.expectRevert(PDPService.OnlyOwnerCanPerformAction.selector);
         pdpService.deleteProofSet(setId);
-        vm.expectRevert("Proof set not live");
+        vm.expectRevert(PDPService.ProofSetNotLive.selector);
         pdpService.getProofSetOwner(setId);
-        vm.expectRevert("Proof set not live");
+        vm.expectRevert(PDPService.ProofSetNotLive.selector);
         pdpService.getProofSetLeafCount(setId);
-        vm.expectRevert("Proof set not live");
+        vm.expectRevert(PDPService.ProofSetNotLive.selector);
         pdpService.getRootCid(setId, 0);
-        vm.expectRevert("Proof set not live");
+        vm.expectRevert(PDPService.ProofSetNotLive.selector);
         pdpService.getRootLeafCount(setId, 0);
-        vm.expectRevert("Proof set not live");
+        vm.expectRevert(PDPService.ProofSetNotLive.selector);
         pdpService.getNextChallengeEpoch(setId);
-        vm.expectRevert("Proof set not live");
+        vm.expectRevert(PDPService.ProofSetNotLive.selector);
         pdpService.addRoots(setId, new PDPService.RootData[](0));
         tearDown();
     }
@@ -148,7 +148,7 @@ contract PDPServiceOwnershipTest is Test {
     function testOwnershipPermissionsRequired() public {
         uint256 setId = pdpService.createProofSet(address(recordKeeper));
         vm.prank(nonOwner);
-        vm.expectRevert("Only the current owner can propose a new owner");
+        vm.expectRevert(PDPService.OnlyOwnerCanPerformAction.selector);
         pdpService.proposeProofSetOwner(setId, nextOwner);
 
         // Now send proposal from actual owner
@@ -156,11 +156,11 @@ contract PDPServiceOwnershipTest is Test {
 
         // Proposed owner has no extra permissions
         vm.prank(nextOwner);
-        vm.expectRevert("Only the current owner can propose a new owner");
+        vm.expectRevert(PDPService.OnlyOwnerCanPerformAction.selector);
         pdpService.proposeProofSetOwner(setId, nonOwner);
 
         vm.prank(nonOwner);
-        vm.expectRevert("Only the proposed owner can claim ownership");
+        vm.expectRevert(PDPService.OnlyProposedOwner.selector);
         pdpService.claimProofSetOwnership(setId);
     }
 }
@@ -252,13 +252,13 @@ contract PDPServiceProofSetMutateTest is Test {
 
         // Fail when not adding any roots;
         PDPService.RootData[] memory emptyRoots = new PDPService.RootData[](0);
-        vm.expectRevert("Must add at least one root");
+        vm.expectRevert(PDPService.MustAddAtLeastOneRoot.selector);
         pdpService.addRoots(setId, emptyRoots);
 
         // Fail when proof set is no longer live
         roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 32);
         pdpService.deleteProofSet(setId);
-        vm.expectRevert("Proof set not live");
+        vm.expectRevert(PDPService.ProofSetNotLive.selector);
         pdpService.addRoots(setId, roots);
     }
 
@@ -324,7 +324,7 @@ contract PDPServiceProofSetMutateTest is Test {
         assertEq(pdpService.rootLive(setId, 2), false);
 
         assertEq(pdpService.getNextRootId(setId), 3);
-        assertEq(pdpService.getProofSetLeafCount(setId), 64/32);
+        assertEq(pdpService.getProofSetLeafCount(setId), 64 / 32);
         assertEq(pdpService.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
 
         bytes memory emptyCidData = new bytes(0);
@@ -333,9 +333,8 @@ contract PDPServiceProofSetMutateTest is Test {
         assertEq(pdpService.getRootCid(setId, 2).data, emptyCidData);
 
         assertEq(pdpService.getRootLeafCount(setId, 0), 0);
-        assertEq(pdpService.getRootLeafCount(setId, 1), 64/32);
+        assertEq(pdpService.getRootLeafCount(setId, 1), 64 / 32);
         assertEq(pdpService.getRootLeafCount(setId, 2), 0);
-
     }
     
     function testRemoveBadRootDoesntFail() public {
@@ -787,7 +786,7 @@ contract SumTreeAddTest is Test {
         rootIdsToRemove[0] = 0;
 
         vm.prank(nonOwner);
-        vm.expectRevert("Only the owner can remove roots");
+        vm.expectRevert(PDPService.OnlyOwnerCanPerformAction.selector);
         pdpService.removeRoots(setId, rootIdsToRemove);
     }
 
@@ -809,12 +808,12 @@ contract SumTreeAddTest is Test {
         assertFindRootAndOffset(testSetId, 819, 7, 39);
 
         // Test edge cases
-        vm.expectRevert("Leaf index out of bounds");
+        vm.expectRevert(PDPService.LeafIndexOutOfBounds.selector);
         uint256[] memory outOfBounds = new uint256[](1);
         outOfBounds[0] = 820;
         pdpService.findRootIds(testSetId, outOfBounds);
 
-        vm.expectRevert("Leaf index out of bounds");
+        vm.expectRevert(PDPService.LeafIndexOutOfBounds.selector);
         outOfBounds[0] = 1000;
         pdpService.findRootIds(testSetId, outOfBounds);
     }
