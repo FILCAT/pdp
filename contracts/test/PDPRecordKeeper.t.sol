@@ -6,12 +6,12 @@ import {PDPRecordKeeper} from "../src/PDPRecordKeeper.sol";
 import {PDPListener} from "../src/PDPService.sol";
 
 contract PDPRecordKeeperTest is Test {
-    PDPRecordKeeper public recordKeeper;
+    PDPRecordKeeperApplication public recordKeeper;
     address public pdpServiceAddress;
 
     function setUp() public {
         pdpServiceAddress = address(this);
-        recordKeeper = new PDPRecordKeeper(pdpServiceAddress);
+        recordKeeper = new PDPRecordKeeperApplication(pdpServiceAddress);
     }
 
     function testInitialState() public view {
@@ -28,7 +28,7 @@ contract PDPRecordKeeperTest is Test {
 
         assertEq(recordKeeper.getEventCount(proofSetId), 1, "Event count should be 1 after adding a record");
 
-        PDPRecordKeeper.EventRecord memory eventRecord = recordKeeper.getEvent(proofSetId, 0);
+        PDPRecordKeeperApplication.EventRecord memory eventRecord = recordKeeper.getEvent(proofSetId, 0);
 
         assertEq(eventRecord.epoch, epoch, "Recorded epoch should match");
         assertEq(uint(eventRecord.operationType), uint(operationType), "Recorded operation type should match");
@@ -47,7 +47,7 @@ contract PDPRecordKeeperTest is Test {
         recordKeeper.receiveProofSetEvent(proofSetId, epoch1, operationType1, extraData1);
         recordKeeper.receiveProofSetEvent(proofSetId, epoch2, operationType2, extraData2);
 
-        PDPRecordKeeper.EventRecord[] memory events = recordKeeper.listEvents(proofSetId);
+        PDPRecordKeeperApplication.EventRecord[] memory events = recordKeeper.listEvents(proofSetId);
 
         assertEq(events.length, 2, "Should have 2 events");
         assertEq(events[0].epoch, epoch1, "First event epoch should match");
