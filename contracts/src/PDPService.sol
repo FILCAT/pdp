@@ -11,6 +11,21 @@ contract PDPService {
     uint256 public constant LEAF_SIZE = 32;
     uint256 public constant MAX_ROOT_SIZE = 1 << 50;
 
+    // Errors
+    error ProofSetNotLive();
+    error OnlyOwnerCanPerformAction();
+    error RecordKeeperNotSet();
+    error ProofSetIDOutOfBounds();
+    error InvalidProof();
+    error PrematureProof();
+    error EmptyProof();
+    error OnlyProposedOwner();
+    error MustAddAtLeastOneRoot();
+    error RootSizeMustBeMultipleOf32(uint256 index);
+    error RootSizeMustBeGreaterThanZero(uint256 index);
+    error RootSizeMustBeLessThanMax(uint256 index);
+    error LeafIndexOutOfBounds();
+
     // Types
 
     // State fields
@@ -89,45 +104,45 @@ contract PDPService {
 
     // Returns the leaf count of a proof set
     function getProofSetLeafCount(uint256 setId) public view returns (uint256) {
-        require(proofSetLive(setId), "Proof set not live");
+        if (!proofSetLive(setId)) revert ProofSetNotLive();
         return proofSetLeafCount[setId];
     }
 
     // Returns the next root ID for a proof set
     function getNextRootId(uint256 setId) public view returns (uint256) {
-        require(proofSetLive(setId), "Proof set not live");
+        if (!proofSetLive(setId)) revert ProofSetNotLive();
         return nextRootId[setId];
     }
 
     // Returns the next challenge epoch for a proof set
     function getNextChallengeEpoch(uint256 setId) public view returns (uint256) {
-        require(proofSetLive(setId), "Proof set not live");
+        if (!proofSetLive(setId)) revert ProofSetNotLive();
         return nextChallengeEpoch[setId];
     }
 
     // Returns the owner of a proof set and the proposed owner if any
     function getProofSetOwner(uint256 setId) public view returns (address, address) {
-        require(proofSetLive(setId), "Proof set not live");
+        if (!proofSetLive(setId)) revert ProofSetNotLive();
         return (proofSetOwner[setId], proofSetProposedOwner[setId]);
     }
 
     // Returns the root CID for a given proof set and root ID
     function getRootCid(uint256 setId, uint256 rootId) public view returns (Cids.Cid memory) {
-        require(proofSetLive(setId), "Proof set not live");
+        if (!proofSetLive(setId)) revert ProofSetNotLive();
         return rootCids[setId][rootId];
     }
 
     // Returns the root leaf count for a given proof set and root ID
     function getRootLeafCount(uint256 setId, uint256 rootId) public view returns (uint256) {
-        require(proofSetLive(setId), "Proof set not live");
+        if (!proofSetLive(setId)) revert ProofSetNotLive();
         return rootLeafCounts[setId][rootId];
     }
 
     // owner proposes new owner.  If the owner proposes themself delete any outstanding proposed owner
     function proposeProofSetOwner(uint256 setId, address newOwner) public {
-        require(proofSetLive(setId), "Proof set not live");
+        if (!proofSetLive(setId)) revert ProofSetNotLive();
         address owner = proofSetOwner[setId];
-        require(owner == msg.sender, "Only the current owner can propose a new owner");
+        if (proofSetOwner[setId] != msg.sender) revert OnlyOwnerCanPerformAction();
         if (owner == newOwner) {
             // If the owner proposes themself delete any outstanding proposed owner
             delete proofSetProposedOwner[setId];
@@ -137,14 +152,13 @@ contract PDPService {
     }
 
     function claimProofSetOwnership(uint256 setId) public {
-        require(proofSetLive(setId), "Proof set not live");
-        require(proofSetProposedOwner[setId] == msg.sender, "Only the proposed owner can claim ownership");
+        if (!proofSetLive(setId)) revert ProofSetNotLive();
+        if (proofSetProposedOwner[setId] != msg.sender) revert OnlyProposedOwner();
         proofSetOwner[setId] = msg.sender;
         delete proofSetProposedOwner[setId];
     }
 
-
-    // A proof set is created empty, with no roots. Creation yields a proof set ID 
+    // A proof set is created empty, with no roots. Creation yields a proof set ID
     // for referring to the proof set later.
     // Sender of create message is proof set owner.
     function createProofSet(address recordKeeper) public returns (uint256) {
@@ -161,11 +175,10 @@ contract PDPService {
 
     // Removes a proof set. Must be called by the contract owner.   
     function deleteProofSet(uint256 setId) public {
-        if (setId >= nextProofSetId) {
-            revert("proof set id out of bounds");
+        if (setId >= nextProofSetId) revert ProofSetIDOutOfBounds();
+        if(proofSetOwner[setId] != msg.sender) {
+            revert OnlyOwnerCanPerformAction();
         }
-
-        require(proofSetOwner[setId] == msg.sender, "Only the owner can delete proof sets");
         uint256 deletedLeafCount = proofSetLeafCount[setId];
         proofSetLeafCount[setId] = 0;
         proofSetOwner[setId] = address(0);
@@ -182,9 +195,9 @@ contract PDPService {
     }
 
     function addRoots(uint256 setId, RootData[] calldata rootData) public returns (uint256) {
-        require(proofSetLive(setId), "Proof set not live");
-        require(rootData.length > 0, "Must add at least one root");
-        require(proofSetOwner[setId] == msg.sender, "Only the owner can add roots");
+        if (!proofSetLive(setId)) revert ProofSetNotLive();
+        if (rootData.length == 0) revert MustAddAtLeastOneRoot();
+        if (proofSetOwner[setId] != msg.sender) revert OnlyOwnerCanPerformAction();
         bool needsChallengeEpoch = nextChallengeEpoch[setId] == 0;
         uint256 firstAdded = nextRootId[setId];
 
@@ -193,7 +206,7 @@ contract PDPService {
         }
         // Initialise the first challenge epoch when the first data is added.
         if (needsChallengeEpoch) {
-            nextChallengeEpoch[setId] = block.number + challengeFinality; 
+            nextChallengeEpoch[setId] = block.number + challengeFinality;
         }
 
         bytes memory extraData = abi.encode(firstAdded, rootData);
@@ -227,11 +240,11 @@ contract PDPService {
 
     // removeRoots removes a batch of roots from a proof set.  Must be called by the proof set owner.
     // returns the total removed leaf count
-    function removeRoots(uint256 setId, uint256[] calldata rootIds) public returns (uint256){
-        require(proofSetOwner[setId] == msg.sender, "Only the owner can remove roots");
-        require(proofSetLive(setId), "Proof set not live");
+    function removeRoots(uint256 setId, uint256[] calldata rootIds) public returns (uint256) {
+        if (proofSetOwner[setId] != msg.sender) revert OnlyOwnerCanPerformAction();
+        if (!proofSetLive(setId)) revert ProofSetNotLive();
         uint256 totalDelta = 0;
-        for (uint256 i = 0; i < rootIds.length; i++){
+        for (uint256 i = 0; i < rootIds.length; i++) {
             totalDelta += removeOneRoot(setId, rootIds[i]);
         }
         proofSetLeafCount[setId] -= totalDelta;
@@ -261,7 +274,9 @@ contract PDPService {
     }
 
     function findOneRootId(uint256 setId, uint256 leafIndex, uint256 top) internal view returns (RootIdAndOffset memory) { 
-        require(leafIndex < proofSetLeafCount[setId], "Leaf index out of bounds");
+        if (leafIndex >= proofSetLeafCount[setId]) {
+            revert LeafIndexOutOfBounds();
+        }
         uint256 searchPtr = (1 << top) - 1;
         uint256 acc = 0;
 
@@ -320,8 +335,12 @@ contract PDPService {
     // Note that this method is not restricted to the proof set owner.
     function provePossession(uint256 setId, Proof[] calldata proofs) public {
         uint256 challengeEpoch = nextChallengeEpoch[setId];
-        require(block.number >= challengeEpoch, "premature proof");
-        require(proofs.length > 0, "empty proof");
+        if (block.number < challengeEpoch) {
+            revert PrematureProof();
+        }
+        if (proofs.length == 0) {
+            revert EmptyProof();
+        }
 
         // TODO: fetch proper seed from chain randomness, https://github.com/FILCAT/pdp/issues/44
         uint256 seed = challengeEpoch;
@@ -338,7 +357,9 @@ contract PDPService {
             RootIdAndOffset memory root = findOneRootId(setId, challengeIdx, sumTreeTop);
             bytes32 rootHash = Cids.digestFromCid(getRootCid(setId, root.rootId));
             bool ok = MerkleVerify.verify(proofs[i].proof, rootHash, proofs[i].leaf, root.offset);
-            require(ok, "proof did not verify");
+            if (!ok) {
+                revert InvalidProof();
+            }
         }
 
         // Set the next challenge epoch.
@@ -411,7 +432,9 @@ contract PDPService {
 
     /* Record keeper functions */
     function _addRecord(uint256 proofSetId, address recordKeeper, PDPRecordKeeper.OperationType operationType, bytes memory extraData) internal {
-        require(address(recordKeeper) != address(0), "Record keeper must be set");
+        if (address(recordKeeper) == address(0)) {
+            revert RecordKeeperNotSet();
+        }
         PDPRecordKeeper(recordKeeper).addRecord(proofSetId, uint64(block.number), operationType, extraData);
     }
 
