@@ -27,6 +27,7 @@ contract PDPService {
     // Constants
     uint256 public constant LEAF_SIZE = 32;
     uint256 public constant MAX_ROOT_SIZE = 1 << 50;
+    uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
 
     // Events
     event ProofSetCreated(uint256 indexed setId);
@@ -151,6 +152,12 @@ contract PDPService {
         return rootLeafCounts[setId][rootId];
     }
 
+    // For testing only
+    function setLastChallengedLeaf(uint256 setId, uint256 leafIndex) internal {
+        require(proofSetLive(setId), "Proof set not live");
+        lastChallengedLeaf[setId] = leafIndex;
+    }
+
     // owner proposes new owner.  If the owner proposes themself delete any outstanding proposed owner
     function proposeProofSetOwner(uint256 setId, address newOwner) public {
         require(proofSetLive(setId), "Proof set not live");
@@ -259,9 +266,14 @@ contract PDPService {
     }
 
     function enqueueRemovals(uint256 setId, uint256[] calldata rootIds) public {
+        require(rootIds.length + enqueuedRemovals[setId].length <= MAX_ENQUEUED_REMOVALS, "Too many removals wait for next proving period to schedule");
+        uint256 totalDelta = 0;
         for (uint256 i = 0; i < rootIds.length; i++){
+            totalDelta += rootLeafCounts[setId][rootIds[i]];
             enqueuedRemovals[setId].push(rootIds[i]);
         }
+        bytes memory extraData = abi.encode(totalDelta, rootIds);
+        _notifyApplication(setId, proofSetApplication[setId], PDPApplication.OperationType.REMOVE_SCHEDULED, extraData);
     }
 
     // removeRoots removes a batch of roots from a proof set.  Must be called by the proof set owner.
@@ -354,7 +366,7 @@ contract PDPService {
         bytes32[] proof;
     }
 
-    function proveAndUpdate(uint256 setId, Proof[] calldata proofs) public {
+    function completeProvingPeriod(uint256 setId, Proof[] calldata proofs) public {
         // Prove 
         provePossession(setId, proofs);
 
@@ -377,7 +389,7 @@ contract PDPService {
     // proof set Merkle roots at some epoch. The challenge seed is determined 
     // by the epoch of the previous proof of possession.
     // Note that this method is not restricted to the proof set owner.
-    function provePossession(uint256 setId, Proof[] calldata proofs) public {
+    function provePossession(uint256 setId, Proof[] calldata proofs) internal {
         uint256 challengeEpoch = nextChallengeEpoch[setId];
         require(block.number >= challengeEpoch, "premature proof");
         require(proofs.length > 0, "empty proof");
