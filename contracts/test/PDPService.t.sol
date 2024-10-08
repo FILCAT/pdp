@@ -166,15 +166,23 @@ contract PDPServiceOwnershipTest is Test {
     }
 }
 
+contract MutateTesterPDPService is PDPService {
+    constructor(uint256 _challengeFinality) PDPService(_challengeFinality) {}
+
+    function removeRootsExternal(uint256 setId, uint256[] memory roots) public returns (uint256) {
+        return super.removeRoots(setId, roots);
+    }
+}
+
 contract PDPServiceProofSetMutateTest is Test {
     uint256 constant challengeFinalityDelay = 2;
 
-    PDPService pdpService;
+    MutateTesterPDPService pdpService;
     PDPRecordKeeperApplication recordKeeper;
     RecordKeeperHelper recordAssert;
 
     function setUp() public {
-        pdpService = new PDPService(challengeFinalityDelay);
+        pdpService = new MutateTesterPDPService(challengeFinalityDelay);
         recordKeeper = new PDPRecordKeeperApplication(address(pdpService));
         recordAssert = new RecordKeeperHelper(address(recordKeeper));
     }
@@ -293,7 +301,7 @@ contract PDPServiceProofSetMutateTest is Test {
         // Remove root
         uint256[] memory toRemove = new uint256[](1);
         toRemove[0] = 0;
-        pdpService.removeRoots(setId, toRemove);
+        pdpService.removeRootsExternal(setId, toRemove);
         recordAssert.expectRecord(PDPApplication.OperationType.REMOVE, setId);
 
         assertEq(pdpService.rootLive(setId, 0), false);
@@ -317,7 +325,7 @@ contract PDPServiceProofSetMutateTest is Test {
         uint256[] memory toRemove = new uint256[](2);
         toRemove[0] = 0;
         toRemove[1] = 2;
-        pdpService.removeRoots(setId, toRemove);
+        pdpService.removeRootsExternal(setId, toRemove);
         recordAssert.expectRecord(PDPApplication.OperationType.REMOVE, setId);
 
         assertEq(pdpService.rootLive(setId, 0), false);
@@ -348,29 +356,52 @@ contract PDPServiceProofSetMutateTest is Test {
         recordAssert.expectRecord(PDPApplication.OperationType.ADD, setId);
         uint256[] memory toRemove = new uint256[](1);
         toRemove[0] = 1;
-        pdpService.removeRoots(setId, toRemove);
+        pdpService.removeRootsExternal(setId, toRemove);
 
         toRemove[0] = 0;
-        pdpService.removeRoots(setId, toRemove);
+        pdpService.removeRootsExternal(setId, toRemove);
         recordAssert.expectRecord(PDPApplication.OperationType.REMOVE, setId);
         assertEq(false, pdpService.rootLive(setId, 0));
 
         // Removing again fails
-        pdpService.removeRoots(setId, toRemove);
+        pdpService.removeRootsExternal(setId, toRemove);
         assertEq(false, pdpService.rootLive(setId, 0));
+    }
+}
 
+contract ProvePossessionTesterPDPService is PDPService {
+    constructor(uint256 _challengeFinality) PDPService(_challengeFinality) {}
+
+    function removeRootsExternal(uint256 setId, uint256[] memory roots) public returns (uint256) {
+        uint256 ret = super.removeRoots(setId, roots);
+        uint256 totalLeafCount = super.getProofSetLeafCount(setId);
+        super.setLastChallengedLeaf(setId, totalLeafCount);
+        return ret;
+    }
+
+    function addRootsExternal(uint256 setId, PDPService.RootData[] calldata roots) public returns (uint256) {
+        uint256 ret = super.addRoots(setId, roots);
+        // Add this root to the set of root ids to be challenged.
+        // This way we don't have to process an extra proving period in order to test proving.
+        uint256 totalLeafCount = super.getProofSetLeafCount(setId);
+        super.setLastChallengedLeaf(setId, totalLeafCount);
+        return ret;
+    }
+
+    function provePossessionExternal(uint256 setId, PDPService.Proof[] calldata proofs) public {
+        super.provePossession(setId, proofs);
     }
 }
 
 contract PDPServiceProofTest is Test {
     uint256 constant challengeFinalityDelay = 2;
     string constant cidPrefix = "CID";
-    PDPService pdpService;
+    ProvePossessionTesterPDPService pdpService;
     PDPRecordKeeperApplication recordKeeper;
     RecordKeeperHelper recordAssert;
 
     function setUp() public {
-        pdpService = new PDPService(challengeFinalityDelay);
+        pdpService = new ProvePossessionTesterPDPService(challengeFinalityDelay);
         recordKeeper = new PDPRecordKeeperApplication(address(pdpService));
         recordAssert = new RecordKeeperHelper(address(recordKeeper));
     }
@@ -392,7 +423,7 @@ contract PDPServiceProofTest is Test {
         PDPService.Proof[] memory proofs = buildProofsForSingleton(setId, challengeCount, tree, leafCount);
 
         // Submit proof.
-        pdpService.provePossession(setId, proofs);
+        pdpService.provePossessionExternal(setId, proofs);
         recordAssert.expectRecord(PDPApplication.OperationType.PROVE_POSSESSION, setId);
         // Verify the next challenge is in a subsequent epoch.
         assertEq(pdpService.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
@@ -411,9 +442,8 @@ contract PDPServiceProofTest is Test {
         PDPService.Proof[] memory proofs = buildProofsForSingleton(setId, 1, tree, leafCount);
 
         // Submit proof.
-        pdpService.provePossession(setId, proofs);
+        pdpService.provePossessionExternal(setId, proofs);
         recordAssert.expectRecord(PDPApplication.OperationType.PROVE_POSSESSION, setId);
-        assertEq(pdpService.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
         assertEq(pdpService.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
         tearDown();
     }
@@ -431,7 +461,7 @@ contract PDPServiceProofTest is Test {
 
         // Submit proof.
         vm.expectRevert();
-        pdpService.provePossession(setId, proofs);
+        pdpService.provePossessionExternal(setId, proofs);
         tearDown();
     }
 
@@ -442,13 +472,13 @@ contract PDPServiceProofTest is Test {
 
         // Rejected with no roots
         vm.expectRevert();
-        pdpService.provePossession(setId, emptyProof);
+        pdpService.provePossessionExternal(setId, emptyProof);
 
         addOneRoot(setId, 10);
 
         // Rejected with a root
         vm.expectRevert();
-        pdpService.provePossession(setId, emptyProof);
+        pdpService.provePossessionExternal(setId, emptyProof);
         tearDown();
     }
 
@@ -462,7 +492,7 @@ contract PDPServiceProofTest is Test {
         PDPService.Proof[] memory proofs = buildProofsForSingleton(setId, 1, tree, leafCount);
 
         // Submit proof successfully, advancing the proof set to a new challenge epoch.
-        pdpService.provePossession(setId, proofs);
+        pdpService.provePossessionExternal(setId, proofs);
         recordAssert.expectRecord(PDPApplication.OperationType.PROVE_POSSESSION, setId);
 
         uint nextChallengeEpoch = pdpService.getNextChallengeEpoch(setId);
@@ -471,7 +501,7 @@ contract PDPServiceProofTest is Test {
         
         // The proof for the old challenge epoch should no longer be valid.
         vm.expectRevert();
-        pdpService.provePossession(setId, proofs);
+        pdpService.provePossessionExternal(setId, proofs);
         tearDown();
     }
 
@@ -500,22 +530,25 @@ contract PDPServiceProofTest is Test {
         (trees[1], newRootId) = addOneRoot(setId, leafCounts[1]);
         
         // The proof for one root should be invalid against the set with two.
+        console.log("The proof for one root should be invalid against the set with two.");
         vm.expectRevert();
-        pdpService.provePossession(setId, proofsOneRoot);
+        pdpService.provePossessionExternal(setId, proofsOneRoot);
 
         // Make a new proof that is valid with two roots
         PDPService.Proof[] memory proofsTwoRoots = buildProofs(setId, challengeCount, trees, leafCounts);
         uint256[] memory removeRoots = new uint256[](1);
         removeRoots[0] = newRootId;
-        pdpService.removeRoots(setId, removeRoots);
+        pdpService.removeRootsExternal(setId, removeRoots);
         recordAssert.expectRecord(PDPApplication.OperationType.REMOVE, setId);
 
         // The proof for two roots should be invalid against the set with one.
+        console.log("The proof for two roots should be invalid against the set with one.");
         vm.expectRevert();
-        pdpService.provePossession(setId, proofsTwoRoots);
+        pdpService.provePossessionExternal(setId, proofsTwoRoots);
 
         // But the single root proof is now good again.
-        pdpService.provePossession(setId, proofsOneRoot);
+        console.log("The single root proof is now good again.");
+        pdpService.provePossessionExternal(setId, proofsOneRoot);
         recordAssert.expectRecord(PDPApplication.OperationType.PROVE_POSSESSION, setId);
         tearDown();
     }
@@ -537,7 +570,7 @@ contract PDPServiceProofTest is Test {
         uint challengeCount = 11;
         PDPService.Proof[] memory proofs = buildProofs(setId, challengeCount, trees, leafCounts);
         // Submit proof.
-        pdpService.provePossession(setId, proofs);
+        pdpService.provePossessionExternal(setId, proofs);
         recordAssert.expectRecord(PDPApplication.OperationType.PROVE_POSSESSION, setId);
         // Verify the next challenge is in a subsequent epoch.
         assertEq(pdpService.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
@@ -561,7 +594,7 @@ contract PDPServiceProofTest is Test {
         // Create new proof set and add roots.
         uint256 setId = pdpService.createProofSet(address(recordKeeper));
         recordAssert.expectRecord(PDPApplication.OperationType.CREATE, setId);
-        pdpService.addRoots(setId, roots);
+        pdpService.addRootsExternal(setId, roots);
         recordAssert.expectRecord(PDPApplication.OperationType.ADD, setId);
         return (setId, trees);
     }
@@ -580,7 +613,7 @@ contract PDPServiceProofTest is Test {
         bytes32[][] memory tree = ProofUtil.makeTree(leafCount);
         PDPService.RootData[] memory roots = new PDPService.RootData[](1);
         roots[0] = makeRoot(tree, leafCount);
-        uint256 rootId = pdpService.addRoots(setId, roots);
+        uint256 rootId = pdpService.addRootsExternal(setId, roots);
         recordAssert.expectRecord(PDPApplication.OperationType.ADD, setId);
         return (tree, rootId);
     }
@@ -651,6 +684,10 @@ contract SumTreeInternalTestPDPService is PDPService {
 
     function getSumTreeCounts(uint256 setId, uint256 rootId) public view returns (uint256) {
         return sumTreeCounts[setId][rootId];
+    }
+
+    function removeRootsExternal(uint256 setId, uint256[] calldata rootIds) public {
+        super.removeRoots(setId, rootIds);
     }
 }
 
@@ -757,7 +794,7 @@ contract SumTreeAddTest is Test {
 
         // Delete some
         // Remove roots in batch
-        pdpService.removeRoots(testSetId, rootIdsToRemove);
+        pdpService.removeRootsExternal(testSetId, rootIdsToRemove);
         for (uint256 i = 0; i < rootIdsToRemove.length; i++) {
             bytes memory zeroBytes;
             assertEq(pdpService.getRootCid(testSetId, rootIdsToRemove[i]).data, zeroBytes);
@@ -776,6 +813,7 @@ contract SumTreeAddTest is Test {
         assertEq(pdpService.getProofSetLeafCount(testSetId), 820, "Incorrect final proof set leaf count");
     }
 
+    // TODO: This should move to enqueued removal tests
     function testBatchedRemoveRootsOnlyOwner() public {
         uint256 setId = pdpService.createProofSet(address(recordKeeper));
         Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test"));
@@ -789,7 +827,7 @@ contract SumTreeAddTest is Test {
 
         vm.prank(nonOwner);
         vm.expectRevert("Only the owner can remove roots");
-        pdpService.removeRoots(setId, rootIdsToRemove);
+        pdpService.removeRootsExternal(setId, rootIdsToRemove);
     }
 
     function testFindRootId() public {
@@ -909,7 +947,7 @@ contract SumTreeAddTest is Test {
             rootDataArray[0] = PDPService.RootData(testCid, sizes[i] * pdpService.LEAF_SIZE());
             pdpService.addRoots(testSetId, rootDataArray);
         }
-        pdpService.removeRoots(testSetId, rootIdsToRemove);
+        pdpService.removeRootsExternal(testSetId, rootIdsToRemove);
 
         assertFindRootAndOffset(testSetId, 0, 3, 0);
         assertFindRootAndOffset(testSetId, 1, 4, 0);
@@ -1018,11 +1056,12 @@ contract RecordKeeperIntegrationTest is Test {
         recordKeeper.setBadOperation(PDPApplication.OperationType.NONE);
         pdpService.addRoots(0, roots);
 
-        recordKeeper.setBadOperation(PDPApplication.OperationType.REMOVE);
-        uint256[] memory rootIds = new uint256[](1);
-        rootIds[0] = 0;
-        vm.expectRevert("Failing operation");
-        pdpService.removeRoots(0, rootIds);
+        // TODO: make this test the enqueued removal and prove period cases 
+        // recordKeeper.setBadOperation(PDPApplication.OperationType.REMOVE);
+        // uint256[] memory rootIds = new uint256[](1);
+        // rootIds[0] = 0;
+        // vm.expectRevert("Failing operation");
+        // pdpService.removeRoots(0, rootIds);
     }
 }
 

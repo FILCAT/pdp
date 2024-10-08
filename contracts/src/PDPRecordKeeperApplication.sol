@@ -9,6 +9,7 @@ interface PDPApplication {
         CREATE,
         ADD,
         REMOVE,
+        REMOVE_SCHEDULED,
         PROVE_POSSESSION,
         DELETE
     }
