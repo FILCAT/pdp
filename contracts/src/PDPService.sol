@@ -5,11 +5,15 @@ import {BitOps} from "../src/BitOps.sol";
 import {Cids} from "../src/Cids.sol";
 import {MerkleVerify} from "../src/Proofs.sol";
 import {PDPRecordKeeper} from "../src/PDPRecordKeeper.sol";
+import {SendAPI} from "./lib/SendAPI.sol";
+import {CommonTypes} from "./lib/types/CommonTypes.sol";
+
 
 contract PDPService {
     // Constants
     uint256 public constant LEAF_SIZE = 32;
-    uint256 public constant MAX_ROOT_SIZE = 1 << 50;
+    uint256 public constant MAX_ROOT_SIZE = 1 << 50; 
+    uint64 public immutable BURNER = 0;
 
     // Errors
     error ProofSetNotLive();
@@ -17,6 +21,7 @@ contract PDPService {
     error RecordKeeperNotSet();
     error ProofSetIDOutOfBounds();
     error InvalidProof();
+    error InvalidAmount();
     error PrematureProof();
     error EmptyProof();
     error OnlyProposedOwner();
@@ -80,6 +85,12 @@ contract PDPService {
     // Methods
     constructor(uint256 _challengeFinality) {
         challengeFinality = _challengeFinality;
+    }
+
+    function burnFee(uint256 amount) public payable {
+        if (msg.value != amount) revert InvalidAmount();
+        // Burn the fee to the Filecoin NATIVE actor = 0
+        SendAPI.send(CommonTypes.FilActorId.wrap(BURNER), amount);
     }
 
     // Returns the current challenge finality value
