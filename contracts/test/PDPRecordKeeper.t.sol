@@ -64,13 +64,13 @@ contract PDPRecordKeeperTest is Test {
         bytes memory extraData = abi.encode("test data");
 
         vm.prank(address(0xdead));
-        vm.expectRevert("Caller is not the PDP service");
+        vm.expectRevert(PDPRecordKeeper.CallerIsNotThePDPService.selector);
         recordKeeper.addRecord(proofSetId, epoch, operationType, extraData);
     }
 
     function testGetEventOutOfBounds() public {
         uint256 proofSetId = 1;
-        vm.expectRevert("Event index out of bounds");
+        vm.expectRevert(PDPRecordKeeper.EventIndexOutOfBounds.selector);
         recordKeeper.getEvent(proofSetId, 0);
     }
 }

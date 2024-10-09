@@ -55,8 +55,7 @@ contract BitOpsTest is Test {
         uint256 exceedingValue = maxInt256 + 1;
 
         // Expect the call to revert
-        vm.expectRevert("Input exceeds maximum int256 value");
-        
+        vm.expectRevert(BitOps.ExceedsMaximumInt256Value.selector);
         // Call ctz with a value exceeding max int256
         BitOps.ctz(exceedingValue);
     }

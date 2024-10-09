@@ -6,6 +6,8 @@ pragma solidity ^0.8.13;
 // and provides a way to query these events.
 // This contract only supports one PDP service caller, set in the constructor.
 contract PDPRecordKeeper {
+    // Errors
+    error CallerIsNotThePDPService();
     // The address of the PDP service contract that is allowed to call this contract
     address public immutable pdpServiceAddress;
 
@@ -36,25 +38,20 @@ contract PDPRecordKeeper {
         require(_pdpServiceAddress != address(0), "PDP service address cannot be zero");
         pdpServiceAddress = _pdpServiceAddress;
     }
-
     // Modifier to ensure only the PDP service contract can call certain functions
     modifier onlyPDPService() {
-        require(msg.sender == pdpServiceAddress, "Caller is not the PDP service");
+        if (msg.sender != pdpServiceAddress) {
+            revert CallerIsNotThePDPService();
+        }
         _;
     }
 
     // Function to add a new event record
-    function addRecord(
-        uint256 proofSetId,
-        uint64 epoch,
-        OperationType operationType,
-        bytes calldata extraData
-    ) external onlyPDPService {
-        EventRecord memory newRecord = EventRecord({
-            epoch: epoch,
-            operationType: operationType,
-            extraData: extraData
-        });
+    function addRecord(uint256 proofSetId, uint64 epoch, OperationType operationType, bytes calldata extraData)
+        external
+        onlyPDPService
+    {
+        EventRecord memory newRecord = EventRecord({epoch: epoch, operationType: operationType, extraData: extraData});
         proofSetEvents[proofSetId].push(newRecord);
         emit RecordAdded(proofSetId, epoch, operationType);
     }
@@ -64,13 +61,13 @@ contract PDPRecordKeeper {
         return proofSetEvents[proofSetId].length;
     }
 
+    error EventIndexOutOfBounds();
     // Function to get a specific event for a proof set
-    function getEvent(uint256 proofSetId, uint256 eventIndex) 
-        external 
-        view 
-        returns (EventRecord memory) 
-    {
-        require(eventIndex < proofSetEvents[proofSetId].length, "Event index out of bounds");
+
+    function getEvent(uint256 proofSetId, uint256 eventIndex) external view returns (EventRecord memory) {
+        if (eventIndex >= proofSetEvents[proofSetId].length) {
+            revert EventIndexOutOfBounds();
+        }
         return proofSetEvents[proofSetId][eventIndex];
     }
 
