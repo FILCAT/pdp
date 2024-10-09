@@ -84,7 +84,7 @@ contract PDPService {
     // Each proof set notifies a configurable listener to implement extensible applications managing data storage
     mapping(uint256 => address) proofSetListener;
     mapping(uint256 => uint256) lastChallengedLeaf;
-    mapping(uint256 => uint256[]) enqueuedRemovals;
+    mapping(uint256 => uint256[]) scheduledRemovals;
     // ownership of proof set is initialized upon creation to create message sender 
     // proofset owner has exclusive permission to add and remove roots and delete the proof set
     mapping(uint256 => address) proofSetOwner;
@@ -265,12 +265,14 @@ contract PDPService {
         return rootId;
     }
 
-    function enqueueRemovals(uint256 setId, uint256[] calldata rootIds) public {
-        require(rootIds.length + enqueuedRemovals[setId].length <= MAX_ENQUEUED_REMOVALS, "Too many removals wait for next proving period to schedule");
+    function scheduleRemovals(uint256 setId, uint256[] calldata rootIds) public {
+        require(rootIds.length + scheduledRemovals[setId].length <= MAX_ENQUEUED_REMOVALS, "Too many removals wait for next proving period to schedule");
+        require(proofSetOwner[setId] == msg.sender, "Only the owner can schedule removal of roots");
+        require(proofSetLive(setId), "Proof set not live");
         uint256 totalDelta = 0;
         for (uint256 i = 0; i < rootIds.length; i++){
             totalDelta += rootLeafCounts[setId][rootIds[i]];
-            enqueuedRemovals[setId].push(rootIds[i]);
+            scheduledRemovals[setId].push(rootIds[i]);
         }
         bytes memory extraData = abi.encode(totalDelta, rootIds);
         _notifyApplication(setId, proofSetApplication[setId], PDPApplication.OperationType.REMOVE_SCHEDULED, extraData);
@@ -279,7 +281,6 @@ contract PDPService {
     // removeRoots removes a batch of roots from a proof set.  Must be called by the proof set owner.
     // returns the total removed leaf count
     function removeRoots(uint256 setId, uint256[] memory rootIds) internal returns (uint256){
-        require(proofSetOwner[setId] == msg.sender, "Only the owner can remove roots");
         require(proofSetLive(setId), "Proof set not live");
         uint256 totalDelta = 0;
         for (uint256 i = 0; i < rootIds.length; i++){
@@ -371,7 +372,7 @@ contract PDPService {
         provePossession(setId, proofs);
 
         // Take removed roots out of proving set
-        uint256[] storage removals = enqueuedRemovals[setId];
+        uint256[] storage removals = scheduledRemovals[setId];
         uint256[] memory removalsToProcess = new uint256[](removals.length);
     
         for (uint256 i = 0; i < removals.length; i++) {
