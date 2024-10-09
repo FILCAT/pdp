@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.20;
 
-import {BitOps} from "../src/BitOps.sol";
-import {Cids} from "../src/Cids.sol";
-import {MerkleVerify} from "../src/Proofs.sol";
-import {PDPRecordKeeper} from "../src/PDPRecordKeeper.sol";
+import {BitOps} from "./BitOps.sol";
+import {Cids} from "./Cids.sol";
+import {MerkleVerify} from "./Proofs.sol";
+import {PDPRecordKeeper} from "./PDPRecordKeeper.sol";
 
 contract PDPService {
     // Constants

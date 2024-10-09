@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.20;
 
 // PDPRecordKeeper is a default implementation of a record keeper for the PDP service.
 // It maintains a record of all events that have occurred in the PDP service,
