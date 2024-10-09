@@ -11,6 +11,12 @@ contract PDPService {
     uint256 public constant LEAF_SIZE = 32;
     uint256 public constant MAX_ROOT_SIZE = 1 << 50;
 
+    // Events
+    event ProofSetCreated(uint256 indexed setId);
+    event RootsAdded(uint256 indexed firstAdded);
+    event RootsRemoved(uint256 indexed totalDelta);
+
+
     // Types
 
     // State fields
@@ -156,6 +162,7 @@ contract PDPService {
 
         bytes memory extraData = abi.encode(msg.sender);
         _addRecord(setId, recordKeeper, PDPRecordKeeper.OperationType.CREATE, extraData);
+        emit ProofSetCreated(setId);
         return setId;
     }
 
@@ -198,6 +205,7 @@ contract PDPService {
 
         bytes memory extraData = abi.encode(firstAdded, rootData);
         _addRecord(setId, proofSetRecordKeeper[setId], PDPRecordKeeper.OperationType.ADD, extraData);
+        emit RootsAdded(firstAdded);
         return firstAdded;
     }
 
@@ -243,6 +251,7 @@ contract PDPService {
 
         bytes memory extraData = abi.encode(totalDelta, rootIds);
         _addRecord(setId, proofSetRecordKeeper[setId], PDPRecordKeeper.OperationType.REMOVE, extraData);
+        emit RootsRemoved(totalDelta);
         return totalDelta;
     }
 
@@ -307,7 +316,6 @@ contract PDPService {
         }
         return result;
     }
-
 
     struct Proof {
         bytes32 leaf;
