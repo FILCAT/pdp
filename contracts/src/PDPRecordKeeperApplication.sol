@@ -11,7 +11,8 @@ interface PDPApplication {
         REMOVE,
         REMOVE_SCHEDULED,
         PROVE_POSSESSION,
-        DELETE
+        DELETE, 
+        FAULT
     }
 
     function notify(
