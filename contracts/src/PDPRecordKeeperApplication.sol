@@ -8,11 +8,10 @@ interface PDPApplication {
         NONE,
         CREATE,
         ADD,
-        REMOVE,
         REMOVE_SCHEDULED,
         PROVE_POSSESSION,
         DELETE, 
-        FAULT
+        NEXT_PROVING_PERIOD
     }
 
     function notify(

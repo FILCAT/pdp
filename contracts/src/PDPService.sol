@@ -263,8 +263,6 @@ contract PDPService {
         require(proofSetLive(setId), "Proof set not live");
         uint256 totalDelta = 0;
         for (uint256 i = 0; i < rootIds.length; i++){
-            // Ensure the root id is in range out of paranoia
-            require(rootIds[i] < nextRootId[setId], "Root id out of bounds");
             totalDelta += rootLeafCounts[setId][rootIds[i]];
             scheduledRemovals[setId].push(rootIds[i]);
         }
@@ -288,8 +286,6 @@ contract PDPService {
             nextChallengeEpoch[setId] = 0;
         }
 
-        bytes memory extraData = abi.encode(totalDelta, rootIds);
-        _notifyApplication(setId, proofSetApplication[setId], PDPApplication.OperationType.REMOVE, extraData);
         return totalDelta;
     }
 
@@ -361,29 +357,12 @@ contract PDPService {
         bytes32[] proof;
     }
 
-    function completeProvingPeriod(uint256 setId, Proof[] calldata proofs) public {
-        // Prove 
-        provePossession(setId, proofs);
-
-        // Take removed roots out of proving set
-        uint256[] storage removals = scheduledRemovals[setId];
-        uint256[] memory removalsToProcess = new uint256[](removals.length);
-    
-        for (uint256 i = 0; i < removalsToProcess.length; i++) {
-            removalsToProcess[i] = removals[removals.length - 1];
-            removals.pop();
-        }
-    
-        removeRoots(setId, removalsToProcess);
-
-        // Bring added roots into proving set 
-        lastChallengedLeaf[setId] = proofSetLeafCount[setId];
-    }
-
-    // Signal that the proving period cannot be proven. Processing adds removes and challenge resampling.
-    function faultProvingPeriod(uint256 setId) public {
-        require(block.number >= nextChallengeEpoch[setId], "proving period not yet started");
-        require(msg.sender == proofSetOwner[setId], "only the owner can fault");
+    // Roll over to the next proving period
+    // 1. Resample challenge
+    // 2. Track newly added roots for proving
+    // 3. Remove scheduled removals
+    function nextProvingPeriod(uint256 setId) public {
+        require(msg.sender == proofSetOwner[setId], "only the owner can move to next proving period");
         // Take removed roots out of proving set
         uint256[] storage removals = scheduledRemovals[setId];
         uint256[] memory removalsToProcess = new uint256[](removals.length);
@@ -396,12 +375,9 @@ contract PDPService {
         removeRoots(setId, removalsToProcess);
         // Bring added roots into proving set 
         lastChallengedLeaf[setId] = proofSetLeafCount[setId];
-
 
         nextChallengeEpoch[setId] = block.number + challengeFinality; 
-        _notifyApplication(setId, proofSetApplication[setId], PDPApplication.OperationType.FAULT, bytes("")); 
-
-
+        _notifyApplication(setId, proofSetApplication[setId], PDPApplication.OperationType.NEXT_PROVING_PERIOD, bytes("")); 
     }
 
     function drawChallengeSeed(uint256 setId) internal view returns (uint256) {
@@ -413,7 +389,7 @@ contract PDPService {
     // proof set Merkle roots at some epoch. The challenge seed is determined 
     // by the epoch of the previous proof of possession.
     // Note that this method is not restricted to the proof set owner.
-    function provePossession(uint256 setId, Proof[] calldata proofs) internal {
+    function provePossession(uint256 setId, Proof[] calldata proofs) public {
         uint256 challengeEpoch = nextChallengeEpoch[setId];
         require(block.number >= challengeEpoch, "premature proof");
         require(proofs.length > 0, "empty proof");
@@ -435,8 +411,6 @@ contract PDPService {
             require(ok, "proof did not verify");
         }
 
-        // Set the next challenge epoch.
-       nextChallengeEpoch[setId] = block.number + challengeFinality; 
         bytes memory extraData = abi.encode(seed, proofs.length);
         _notifyApplication(setId, proofSetApplication[setId], PDPApplication.OperationType.PROVE_POSSESSION, extraData); 
     }
