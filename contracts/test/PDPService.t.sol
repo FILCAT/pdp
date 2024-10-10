@@ -846,8 +846,7 @@ contract SumTreeAddTest is Test {
         assertEq(pdpService.getProofSetLeafCount(testSetId), 820, "Incorrect final proof set leaf count");
     }
 
-    // TODO: This should move to enqueued removal tests
-    function testBatchedRemoveRootsOnlyOwner() public {
+    function testScheduleRemoveRootsOnlyOwner() public {
         uint256 setId = pdpService.createProofSet(address(recordKeeper));
         Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test"));
         PDPService.RootData[] memory rootDataArray = new PDPService.RootData[](1);
@@ -859,8 +858,8 @@ contract SumTreeAddTest is Test {
         rootIdsToRemove[0] = 0;
 
         vm.prank(nonOwner);
-        vm.expectRevert("Only the owner can remove roots");
-        pdpService.removeRootsExternal(setId, rootIdsToRemove);
+        vm.expectRevert("Only the owner can schedule removal of roots");
+        pdpService.scheduleRemovals(setId, rootIdsToRemove);
     }
 
     function testFindRootId() public {
