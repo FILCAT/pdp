@@ -408,6 +408,35 @@ contract PDPService {
         lastChallengedLeaf[setId] = proofSetLeafCount[setId];
     }
 
+    // Signal that the proving period cannot be proven. Processing adds removes and challenge resampling.
+    function faultProvingPeriod(uint256 setId) public {
+        require(block.number >= nextChallengeEpoch[setId], "proving period not yet started");
+        require(msg.sender == proofSetOwner[setId], "only the owner can fault");
+        // Take removed roots out of proving set
+        uint256[] storage removals = scheduledRemovals[setId];
+        uint256[] memory removalsToProcess = new uint256[](removals.length);
+    
+        for (uint256 i = 0; i < removalsToProcess.length; i++) {
+            removalsToProcess[i] = removals[removals.length - 1];
+            removals.pop();
+        }
+    
+        removeRoots(setId, removalsToProcess);
+        // Bring added roots into proving set 
+        lastChallengedLeaf[setId] = proofSetLeafCount[setId];
+
+
+        nextChallengeEpoch[setId] = block.number + challengeFinality; 
+        _notifyApplication(setId, proofSetApplication[setId], PDPApplication.OperationType.FAULT, bytes("")); 
+
+
+    }
+
+    function drawChallengeSeed(uint256 setId) internal view returns (uint256) {
+        // TODO: fetch proper seed from chain randomness, https://github.com/FILCAT/pdp/issues/44
+        return nextChallengeEpoch[setId];
+    }
+
     // Verifies and records that the provider proved possession of the 
     // proof set Merkle roots at some epoch. The challenge seed is determined 
     // by the epoch of the previous proof of possession.
@@ -416,9 +445,8 @@ contract PDPService {
         uint256 challengeEpoch = nextChallengeEpoch[setId];
         require(block.number >= challengeEpoch, "premature proof");
         require(proofs.length > 0, "empty proof");
+        uint256 seed = drawChallengeSeed(setId);
 
-        // TODO: fetch proper seed from chain randomness, https://github.com/FILCAT/pdp/issues/44
-        uint256 seed = challengeEpoch;
         uint256 leafCount = lastChallengedLeaf[setId];
         uint256 sumTreeTop = 256 - BitOps.clz(nextRootId[setId]);
 
@@ -436,9 +464,9 @@ contract PDPService {
         }
 
         // Set the next challenge epoch.
-        nextChallengeEpoch[setId] = block.number + challengeFinality; 
-        bytes memory extraData = abi.encode(proofSetLeafCount[setId], seed);
-        _notifyListener(setId, proofSetListener[setId], PDPListener.OperationType.PROVE_POSSESSION, extraData);
+       nextChallengeEpoch[setId] = block.number + challengeFinality; 
+        bytes memory extraData = abi.encode(seed, proofs.length);
+        _notifyListener(setId, proofSetListener[setId], PDPListener.OperationType.PROVE_POSSESSION, extraData); 
     }
 
     /* Sum tree functions */
