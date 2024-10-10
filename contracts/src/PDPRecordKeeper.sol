@@ -1,38 +1,20 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 
-import {PDPService} from "./PDPService.sol";
-
-interface PDPApplication {
-    enum OperationType {
-        NONE,
-        CREATE,
-        ADD,
-        REMOVE,
-        PROVE_POSSESSION,
-        DELETE
-    }
-
-    function notify(
-        uint256 proofSetId,
-        uint64 epoch,
-        OperationType operationType,
-        bytes calldata extraData
-    ) external;
-}
+import {PDPService, PDPListener} from "./PDPService.sol";
 
 // PDPRecordKeeperApplication is a default implementation of a PDP Application.
 // It maintains a record of all events that have occurred in the PDP service,
 // and provides a way to query these events.
 // This contract only supports one PDP service caller, set in the constructor.
-contract PDPRecordKeeperApplication is PDPApplication {
+contract PDPRecordKeeper is PDPListener {
     // The address of the PDP service contract that is allowed to call this contract
     address public immutable pdpServiceAddress;
 
     // Struct to store event details
     struct EventRecord {
         uint64 epoch;
-        PDPApplication.OperationType operationType;
+        PDPListener.OperationType operationType;
         bytes extraData;
     }
 
@@ -40,7 +22,7 @@ contract PDPRecordKeeperApplication is PDPApplication {
     mapping(uint256 => EventRecord[]) public proofSetEvents;
 
     // Eth event emitted when a new record is added
-    event RecordAdded(uint256 indexed proofSetId, uint64 epoch, PDPApplication.OperationType operationType);
+    event RecordAdded(uint256 indexed proofSetId, uint64 epoch, PDPListener.OperationType operationType);
 
     constructor(address _pdpServiceAddress) {
         require(_pdpServiceAddress != address(0), "PDP service address cannot be zero");
@@ -54,10 +36,10 @@ contract PDPRecordKeeperApplication is PDPApplication {
     }
 
     // Function to add a new event record
-    function notify(
+    function receiveProofSetEvent(
         uint256 proofSetId,
         uint64 epoch,
-        PDPApplication.OperationType operationType,
+        PDPListener.OperationType operationType,
         bytes calldata extraData
     ) external onlyPDPService {
         EventRecord memory newRecord = EventRecord({

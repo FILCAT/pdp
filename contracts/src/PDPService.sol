@@ -4,7 +4,24 @@ pragma solidity ^0.8.20;
 import {BitOps} from "./BitOps.sol";
 import {Cids} from "./Cids.sol";
 import {MerkleVerify} from "./Proofs.sol";
-import {PDPApplication} from "./PDPRecordKeeperApplication.sol";
+
+interface PDPListener {
+    enum OperationType {
+        NONE,
+        CREATE,
+        ADD,
+        REMOVE,
+        PROVE_POSSESSION,
+        DELETE
+    }
+
+    function receiveProofSetEvent(
+        uint256 proofSetId,
+        uint64 epoch,
+        OperationType operationType,
+        bytes calldata extraData
+    ) external;
+}
 
 contract PDPService {
     // Constants
@@ -36,7 +53,7 @@ contract PDPService {
         address owner;
         nextRootID uint64;
         nextChallengeEpoch: uint64;
-        recordKeeper: address;
+        : address;
     }
     ** PDP service contract tracks many possible proof sets **
     []ProofSet proofsets
@@ -61,8 +78,8 @@ contract PDPService {
     mapping(uint256 => uint256) nextRootId;
     mapping(uint256 => uint256) proofSetLeafCount;
     mapping(uint256 => uint256) nextChallengeEpoch;
-    // Each proof set notifies a configurable application managing data storage
-    mapping(uint256 => address) proofSetApplication;
+    // Each proof set notifies a configurable listener to implement extensible applications managing data storage
+    mapping(uint256 => address) proofSetListener;
     // ownership of proof set is initialized upon creation to create message sender 
     // proofset owner has exclusive permission to add and remove roots and delete the proof set
     mapping(uint256 => address) proofSetOwner;
@@ -154,15 +171,15 @@ contract PDPService {
     // A proof set is created empty, with no roots. Creation yields a proof set ID 
     // for referring to the proof set later.
     // Sender of create message is proof set owner.
-    function createProofSet(address applicationAddr) public returns (uint256) {
+    function createProofSet(address listenerAddr) public returns (uint256) {
         uint256 setId = nextProofSetId++;
         proofSetLeafCount[setId] = 0;
         nextChallengeEpoch[setId] = 0;  // Re-initialized when the first root is added.
         proofSetOwner[setId] = msg.sender;
-        proofSetApplication[setId] = applicationAddr;
+        proofSetListener[setId] = listenerAddr;
 
         bytes memory extraData = abi.encode(msg.sender);
-        _notifyApplication(setId, applicationAddr, PDPApplication.OperationType.CREATE, extraData);
+        _notifyListener(setId, listenerAddr, PDPListener.OperationType.CREATE, extraData);
         emit ProofSetCreated(setId);
 
         return setId;
@@ -181,7 +198,7 @@ contract PDPService {
         nextChallengeEpoch[setId] = 0;
 
         bytes memory extraData = abi.encode(deletedLeafCount);
-        _notifyApplication(setId, proofSetApplication[setId], PDPApplication.OperationType.DELETE, extraData);
+        _notifyListener(setId, proofSetListener[setId], PDPListener.OperationType.DELETE, extraData);
     }
 
     // Struct for tracking root data
@@ -206,9 +223,9 @@ contract PDPService {
         }
 
         bytes memory extraData = abi.encode(firstAdded, rootData);
-        _notifyApplication(setId, proofSetApplication[setId], PDPApplication.OperationType.ADD, extraData);
+        _notifyListener(setId, proofSetListener[setId], PDPListener.OperationType.ADD, extraData);
         emit RootsAdded(firstAdded);
-
+        
         return firstAdded;
     }
 
@@ -253,7 +270,7 @@ contract PDPService {
         }
 
         bytes memory extraData = abi.encode(totalDelta, rootIds);
-        _notifyApplication(setId, proofSetApplication[setId], PDPApplication.OperationType.REMOVE, extraData);
+        _notifyListener(setId, proofSetListener[setId], PDPListener.OperationType.REMOVE, extraData);
         emit RootsRemoved(totalDelta);
 
         return totalDelta;
@@ -356,7 +373,7 @@ contract PDPService {
         // Set the next challenge epoch.
         nextChallengeEpoch[setId] = block.number + challengeFinality; 
         bytes memory extraData = abi.encode(proofSetLeafCount[setId], seed);
-        _notifyApplication(setId, proofSetApplication[setId], PDPApplication.OperationType.PROVE_POSSESSION, extraData);
+        _notifyListener(setId, proofSetListener[setId], PDPListener.OperationType.PROVE_POSSESSION, extraData);
     }
 
     /* Sum tree functions */
@@ -421,10 +438,10 @@ contract PDPService {
         return BitOps.ctz(index + 1);
     }
 
-    // notify the application contract about proof set events 
-    function _notifyApplication(uint256 proofSetId, address applicationAddr, PDPApplication.OperationType operationType, bytes memory extraData) internal {
-        require(address(applicationAddr) != address(0), "Record keeper must be set");
-        PDPApplication(applicationAddr).notify(proofSetId, uint64(block.number), operationType, extraData);
+    // notify the listener contract about proof set events 
+    function _notifyListener(uint256 proofSetId, address listenerAddr, PDPListener.OperationType operationType, bytes memory extraData) internal {
+        require(address(listenerAddr) != address(0), "Record keeper must be set");
+        PDPListener(listenerAddr).receiveProofSetEvent(proofSetId, uint64(block.number), operationType, extraData);
     }
 
 }
