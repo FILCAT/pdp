@@ -307,11 +307,6 @@ contract PDPService {
             totalDelta += removeOneRoot(setId, rootIds[i]);
         }
         proofSetLeafCount[setId] -= totalDelta;
-        // Clear next challenge epoch if the set is now empty.
-        // It will be re-set when new data is added.
-        if (proofSetLeafCount[setId] == 0) {
-            nextChallengeEpoch[setId] = 0;
-        }
 
         return totalDelta;
     }
@@ -404,6 +399,12 @@ contract PDPService {
         lastChallengedLeaf[setId] = proofSetLeafCount[setId];
 
         nextChallengeEpoch[setId] = block.number + challengeFinality; 
+        
+        // Clear next challenge epoch if the set is now empty.
+        // It will be re-set when new data is added.
+        if (proofSetLeafCount[setId] == 0) {
+            nextChallengeEpoch[setId] = 0;
+        }
         _notifyApplication(setId, proofSetApplication[setId], PDPApplication.OperationType.NEXT_PROVING_PERIOD, bytes("")); 
     }
 

@@ -322,6 +322,7 @@ contract PDPServiceProofSetMutateTest is Test {
         pdpService.nextProvingPeriod(setId); // flush
         recordAssert.expectRecord(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
 
+        assertEq(pdpService.getNextChallengeEpoch(setId), 0);
         assertEq(pdpService.rootLive(setId, 0), false);
         assertEq(pdpService.getNextRootId(setId), 1);
         assertEq(pdpService.getProofSetLeafCount(setId), 0);
