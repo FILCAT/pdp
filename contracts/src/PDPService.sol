@@ -237,6 +237,8 @@ contract PDPService {
         uint256 rawSize;
     }
 
+    // Appends new roots to the collection managed by a proof set.
+    // These roots won't be selected for proving until the next proving period.
     function addRoots(uint256 setId, RootData[] calldata rootData) public returns (uint256) {
         require(proofSetLive(setId), "Proof set not live");
         require(rootData.length > 0, "Must add at least one root");
@@ -262,8 +264,6 @@ contract PDPService {
 
     error IndexedError(uint256 idx, string msg);
 
-    // Appends a new root to the collection managed by a proof set.
-    // Must be called by the proof set owner.  
     function addOneRoot(uint256 setId, uint256 callIdx, Cids.Cid calldata root, uint256 rawSize) internal returns (uint256) {
         if (rawSize % LEAF_SIZE != 0) {
             revert IndexedError(callIdx, "Size must be a multiple of 32");
@@ -399,7 +399,7 @@ contract PDPService {
         lastChallengedLeaf[setId] = proofSetLeafCount[setId];
 
         nextChallengeEpoch[setId] = block.number + challengeFinality; 
-        
+
         // Clear next challenge epoch if the set is now empty.
         // It will be re-set when new data is added.
         if (proofSetLeafCount[setId] == 0) {
