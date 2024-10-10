@@ -393,7 +393,50 @@ contract ProvePossessionTesterPDPService is PDPService {
     }
 }
 
-contract PDPServiceProofTest is Test {
+contract ProofBuilderHelper is Test {
+        // Builds a proof of posession for a proof set
+    function buildProofs(PDPService pdpService, uint256 setId, uint challengeCount, bytes32[][][] memory trees, uint[] memory leafCounts) internal view returns (PDPService.Proof[] memory) {
+        uint256 challengeEpoch = pdpService.getNextChallengeEpoch(setId);
+        uint256 seed = challengeEpoch; // Seed is (temporarily) the challenge epoch
+        uint totalLeafCount = 0;
+        for (uint i = 0; i < leafCounts.length; ++i) {
+            totalLeafCount += leafCounts[i];
+        }
+        
+        PDPService.Proof[] memory proofs = new PDPService.Proof[](challengeCount);
+        for (uint challengeIdx = 0; challengeIdx < challengeCount; challengeIdx++) {
+            // Compute challenge index
+            bytes memory payload = abi.encodePacked(seed, setId, uint64(challengeIdx));
+            uint256 challengeOffset = uint256(keccak256(payload)) % totalLeafCount;
+
+            uint treeIdx = 0;
+            uint256 treeOffset = 0;
+            for (uint i = 0; i < leafCounts.length; ++i) {
+                if (leafCounts[i] > challengeOffset) {
+                    treeIdx = i;
+                    treeOffset = challengeOffset;
+                    break;
+                } else {
+                    challengeOffset -= leafCounts[i];
+                }
+            }
+
+            bytes32[][] memory tree = trees[treeIdx];
+            bytes32[] memory path = MerkleProve.buildProof(tree, treeOffset);
+            proofs[challengeIdx] = PDPService.Proof(tree[tree.length - 1][treeOffset], path);
+
+            // console.log("Leaf", vm.toString(proofs[0].leaf));
+            // console.log("Proof");
+            // for (uint j = 0; j < proofs[0].proof.length; j++) {
+            //     console.log(vm.toString(j), vm.toString(proofs[0].proof[j]));
+            // }
+        }
+
+        return proofs;
+    }
+}
+
+contract PDPServiceProofTest is Test, ProofBuilderHelper {
     uint256 constant challengeFinalityDelay = 2;
     string constant cidPrefix = "CID";
     ProvePossessionTesterPDPService pdpService;
@@ -534,7 +577,7 @@ contract PDPServiceProofTest is Test {
         pdpService.provePossessionExternal(setId, proofsOneRoot);
 
         // Make a new proof that is valid with two roots
-        PDPService.Proof[] memory proofsTwoRoots = buildProofs(setId, 1, trees, leafCounts);
+        PDPService.Proof[] memory proofsTwoRoots = buildProofs(pdpService, setId, 1, trees, leafCounts);
         uint256[] memory removeRoots = new uint256[](1);
         removeRoots[0] = newRootId;
         pdpService.removeRoots(setId, removeRoots);
@@ -566,7 +609,7 @@ contract PDPServiceProofTest is Test {
 
         // Build a proof with multiple challenges to span the roots.
         uint challengeCount = 11;
-        PDPService.Proof[] memory proofs = buildProofs(setId, challengeCount, trees, leafCounts);
+        PDPService.Proof[] memory proofs = buildProofs(pdpService, setId, challengeCount, trees, leafCounts);
         // Submit proof.
         pdpService.provePossession(setId, proofs);
         recordAssert.expectRecord(PDPListener.OperationType.PROVE_POSSESSION, setId);
@@ -660,7 +703,7 @@ contract PDPServiceProofTest is Test {
         trees[0] = tree;
         uint[] memory leafCounts = new uint[](1);
         leafCounts[0] = leafCount;
-        PDPService.Proof[] memory proofs = buildProofs(setId, challengeCount, trees, leafCounts);
+        PDPService.Proof[] memory proofs = buildProofs(pdpService, setId, challengeCount, trees, leafCounts);
         return proofs;
     }
 }
@@ -1015,6 +1058,96 @@ contract BadRecordKeeper is PDPListener {
         if (operationType == badOperation) {
             revert("Failing operation");
         }
+    }
+}
+
+contract PDPServiceE2ETest is Test, ProofBuilderHelper {
+    PDPService pdpService;
+    PDPRecordKeeperApplication recordKeeper;
+    uint256 constant challengeFinalityDelay = 2;
+
+    function setUp() public {
+        pdpService = new PDPService(challengeFinalityDelay);
+        recordKeeper = new PDPRecordKeeperApplication(address(pdpService));
+    }
+
+    function testCompleteProvingPeriodE2E() public {
+        // Step 1: Create a proof set
+        uint256 setId = pdpService.createProofSet(address(recordKeeper));
+
+        // Step 2: Add data `A` in scope for the first proving period 
+        // Note that the data in the first addRoots call is added to the first proving period
+        uint256[] memory leafCountsA = new uint256[](2);
+        leafCountsA[0] = 2;
+        leafCountsA[1] = 3;
+        bytes32[][][] memory treesA = new bytes32[][][](2);
+        for (uint256 i = 0; i < leafCountsA.length; i++) {
+            treesA[i] = ProofUtil.makeTree(leafCountsA[i]);
+        }
+
+        PDPService.RootData[] memory rootsPP1 = new PDPService.RootData[](2);
+        rootsPP1[0] = PDPService.RootData(Cids.cidFromDigest("test1", treesA[0][0][0]), leafCountsA[0] * 32);
+        rootsPP1[1] = PDPService.RootData(Cids.cidFromDigest("test2", treesA[1][0][0]), leafCountsA[1] * 32);
+        pdpService.addRoots(setId, rootsPP1);
+
+        uint256 lastChallengedLeafPP1 = pdpService.getLastChallengedLeaf(setId);
+        assertEq(lastChallengedLeafPP1, pdpService.getProofSetLeafCount(setId), "Last challenged leaf should be total leaf count - 1");
+
+        // Step 3: Now that first challenge is set for sampling add more data `B` only in scope for the second proving period 
+        uint256[] memory leafCountsB = new uint256[](2);
+        leafCountsB[0] = 4;
+        leafCountsB[1] = 5;
+        bytes32[][][] memory treesB = new bytes32[][][](2);
+        for (uint256 i = 0; i < leafCountsB.length; i++) {
+            treesB[i] = ProofUtil.makeTree(leafCountsB[i]);
+        }
+
+        PDPService.RootData[] memory rootsPP2 = new PDPService.RootData[](2);
+        rootsPP2[0] = PDPService.RootData(Cids.cidFromDigest("test1", treesB[0][0][0]), leafCountsB[0] * 32);
+        rootsPP2[1] = PDPService.RootData(Cids.cidFromDigest("test2", treesB[1][0][0]), leafCountsB[1]* 32);
+        pdpService.addRoots(setId, rootsPP2);
+
+        assertEq(pdpService.getRootLeafCount(setId, 0), leafCountsA[0], "sanity check: First root leaf count should be correct");
+        assertEq(pdpService.getRootLeafCount(setId, 1), leafCountsA[1], "Second root leaf count should be correct");
+        assertEq(pdpService.getRootLeafCount(setId, 2), leafCountsB[0], "Third root leaf count should be correct");
+        assertEq(pdpService.getRootLeafCount(setId, 3), leafCountsB[1], "Fourth root leaf count should be correct");
+
+        // CHECK: last challenged leaf doesn't move
+        assertEq(pdpService.getLastChallengedLeaf(setId), lastChallengedLeafPP1, "Last challenged leaf should not move");
+        assertEq(pdpService.getProofSetLeafCount(setId), leafCountsA[0] + leafCountsA[1] + leafCountsB[0] + leafCountsB[1], "Leaf count should only include non-removed roots");
+
+
+        // Step 5: schedule removal of first + second proving period data
+        uint256[] memory rootsToRemove = new uint256[](2);
+
+        rootsToRemove[0] = 1; // Remove the second root from first proving period
+        rootsToRemove[1] = 3; // Remove the second root from second proving period
+        pdpService.scheduleRemovals(setId, rootsToRemove);
+        assertEq(pdpService.getScheduledRemovals(setId), rootsToRemove, "Scheduled removals should match rootsToRemove");
+
+        // Step 7: complete proving period 1.
+        // Advance chain until challenge epoch.
+        vm.roll(pdpService.getNextChallengeEpoch(setId));
+        // Prepare proofs.
+        uint256 challengeCount = 5;
+        // Proving trees for PP1 are just treesA 
+        PDPService.Proof[] memory proofsPP1 = buildProofs(pdpService, setId, challengeCount, treesA, leafCountsA);
+
+        pdpService.completeProvingPeriod(setId, proofsPP1);
+ 
+        // CHECK: leaf counts
+        assertEq(pdpService.getRootLeafCount(setId, 0), leafCountsA[0], "First root leaf count should be the set leaf count");
+        assertEq(pdpService.getRootLeafCount(setId, 1), 0, "Second root leaf count should be zeroed after removal");
+        assertEq(pdpService.getRootLeafCount(setId, 2), leafCountsB[0], "Third root leaf count should be the set leaf count");
+        assertEq(pdpService.getRootLeafCount(setId, 3), 0, "Fourth root leaf count should be zeroed after removal");
+        assertEq(pdpService.getProofSetLeafCount(setId), leafCountsA[0] + leafCountsB[0], "Leaf count should == size of non-removed roots");
+        assertEq(pdpService.getLastChallengedLeaf(setId), leafCountsA[0] + leafCountsB[0], "Last challenged leaf should be total leaf count");
+
+        // CHECK: scheduled removals are processed
+        assertEq(pdpService.getScheduledRemovals(setId), new uint256[](0), "Scheduled removals should be processed");
+
+        // CHECK: the next challenge epoch has been updated
+        assertEq(pdpService.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay, "Next challenge epoch should be updated");
     }
 }
 

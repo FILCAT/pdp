@@ -38,6 +38,7 @@ contract PDPService {
     // Types
    
     // State fields
+     event Debug(string message, uint256 value);
 
     /*
     A proof set is the metadata required for tracking data for proof of possession.
@@ -150,6 +151,23 @@ contract PDPService {
     function getRootLeafCount(uint256 setId, uint256 rootId) public view returns (uint256) {
         require(proofSetLive(setId), "Proof set not live");
         return rootLeafCounts[setId][rootId];
+    }
+
+    // Returns the last challenged leaf for a given proof set
+    function getLastChallengedLeaf(uint256 setId) public view returns (uint256) {
+        require(proofSetLive(setId), "Proof set not live");
+        return lastChallengedLeaf[setId];
+    }
+
+    // Returns the scheduled removals for a given proof set
+    function getScheduledRemovals(uint256 setId) public view returns (uint256[] memory) {
+        require(proofSetLive(setId), "Proof set not live");
+        uint256[] storage removals = scheduledRemovals[setId];
+        uint256[] memory result = new uint256[](removals.length);
+        for (uint256 i = 0; i < removals.length; i++) {
+            result[i] = removals[i];
+        }
+        return result;
     }
 
     // For testing only
@@ -271,9 +289,12 @@ contract PDPService {
         require(proofSetLive(setId), "Proof set not live");
         uint256 totalDelta = 0;
         for (uint256 i = 0; i < rootIds.length; i++){
+            // Ensure the root id is in range out of paranoia
+            require(rootIds[i] < nextRootId[setId], "Root id out of bounds");
             totalDelta += rootLeafCounts[setId][rootIds[i]];
             scheduledRemovals[setId].push(rootIds[i]);
         }
+        
         bytes memory extraData = abi.encode(totalDelta, rootIds);
         _notifyApplication(setId, proofSetApplication[setId], PDPApplication.OperationType.REMOVE_SCHEDULED, extraData);
     }
@@ -302,6 +323,7 @@ contract PDPService {
 
     // removeOneRoot removes a root from a proof set. 
     function removeOneRoot(uint256 setId, uint256 rootId) internal returns (uint256) {
+        emit Debug("removing root", rootId);
         uint256 delta = rootLeafCounts[setId][rootId];
         sumTreeRemove(setId, rootId, delta);
         delete rootLeafCounts[setId][rootId];
@@ -375,8 +397,8 @@ contract PDPService {
         uint256[] storage removals = scheduledRemovals[setId];
         uint256[] memory removalsToProcess = new uint256[](removals.length);
     
-        for (uint256 i = 0; i < removals.length; i++) {
-            removalsToProcess[i] = removals[removals.length - 1 - i];
+        for (uint256 i = 0; i < removalsToProcess.length; i++) {
+            removalsToProcess[i] = removals[removals.length - 1];
             removals.pop();
         }
     
