@@ -405,7 +405,7 @@ contract PDPService {
         if (proofSetLeafCount[setId] == 0) {
             nextChallengeEpoch[setId] = 0;
         }
-        _notifyApplication(setId, proofSetApplication[setId], PDPApplication.OperationType.NEXT_PROVING_PERIOD, bytes("")); 
+        _notifyListener(setId, proofSetListener[setId], PDPListener.OperationType.NEXT_PROVING_PERIOD, bytes("")); 
     }
 
     function drawChallengeSeed(uint256 setId) internal view returns (uint256) {

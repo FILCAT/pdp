@@ -10,12 +10,12 @@ import {PDPRecordKeeper} from "../src/PDPRecordKeeper.sol";
 
 contract PDPServiceProofSetCreateDeleteTest is Test {
     PDPService pdpService;
-    PDPRecordKeeperApplication recordKeeper;
+    PDPRecordKeeper recordKeeper;
     RecordKeeperHelper recordAssert;
 
     function setUp() public {
         pdpService = new PDPService(2);
-        recordKeeper = new PDPRecordKeeperApplication(address(pdpService));
+        recordKeeper = new PDPRecordKeeper(address(pdpService));
         recordAssert = new RecordKeeperHelper(address(recordKeeper));
     }
     function tearDown() public view {
@@ -110,14 +110,14 @@ contract PDPServiceProofSetCreateDeleteTest is Test {
 
 contract PDPServiceOwnershipTest is Test {
     PDPService pdpService;
-    PDPRecordKeeperApplication recordKeeper;
+    PDPRecordKeeper recordKeeper;
     address public owner;
     address public nextOwner;
     address public nonOwner;
 
     function setUp() public {
         pdpService = new PDPService(2);
-        recordKeeper = new PDPRecordKeeperApplication(address(pdpService));
+        recordKeeper = new PDPRecordKeeper(address(pdpService));
 
         owner = address(this);
         nextOwner = address(0x1234);
@@ -185,12 +185,12 @@ contract PDPServiceProofSetMutateTest is Test {
     uint256 constant challengeFinalityDelay = 2;
 
     PDPService pdpService;
-    PDPRecordKeeperApplication recordKeeper;
+    PDPRecordKeeper recordKeeper;
     RecordKeeperHelper recordAssert;
 
     function setUp() public {
         pdpService = new PDPService(challengeFinalityDelay);
-        recordKeeper = new PDPRecordKeeperApplication(address(pdpService));
+        recordKeeper = new PDPRecordKeeper(address(pdpService));
         recordAssert = new RecordKeeperHelper(address(recordKeeper));
     }
 
@@ -204,7 +204,7 @@ contract PDPServiceProofSetMutateTest is Test {
         PDPService.RootData[] memory roots = new PDPService.RootData[](1);
         roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         uint256 rootId = pdpService.addRoots(setId, roots);
-        recordAssert.expectRecord(PDPApplication.OperationType.ADD, setId);
+        recordAssert.expectRecord(PDPListener.OperationType.ADD, setId);
         // flush add
         pdpService.nextProvingPeriod(setId);
         recordAssert.expectRecord(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
@@ -233,7 +233,7 @@ contract PDPServiceProofSetMutateTest is Test {
         assertEq(firstId, 0);
         // flush add
         pdpService.nextProvingPeriod(setId);
-        recordAssert.expectRecord(PDPApplication.OperationType.NEXT_PROVING_PERIOD, setId);
+        recordAssert.expectRecord(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
 
         uint256 expectedLeafCount = roots[0].rawSize / 32 + roots[1].rawSize / 32;
         assertEq(pdpService.getProofSetLeafCount(setId), expectedLeafCount);
@@ -438,12 +438,12 @@ contract PDPServiceProofTest is Test, ProofBuilderHelper {
     uint256 constant challengeFinalityDelay = 2;
     string constant cidPrefix = "CID";
     PDPService pdpService;
-    PDPRecordKeeperApplication recordKeeper;
+    PDPRecordKeeper recordKeeper;
     RecordKeeperHelper recordAssert;
 
     function setUp() public {
         pdpService = new PDPService(challengeFinalityDelay);
-        recordKeeper = new PDPRecordKeeperApplication(address(pdpService));
+        recordKeeper = new PDPRecordKeeper(address(pdpService));
         recordAssert = new RecordKeeperHelper(address(recordKeeper));
     }
 
@@ -466,7 +466,6 @@ contract PDPServiceProofTest is Test, ProofBuilderHelper {
         // Submit proof.
         pdpService.provePossession(setId, proofs);
 
-        recordAssert.expectRecord(PDPListener.OperationType.PROVE_POSSESSION, setId);
         // Verify the next challenge is in a subsequent epoch.
         recordAssert.expectRecord(PDPListener.OperationType.PROVE_POSSESSION, setId);
         // Next challenge unchanged by prove
@@ -767,12 +766,12 @@ import "../src/PDPService.sol";
 
 contract SumTreeAddTest is Test {
     SumTreeInternalTestPDPService pdpService;
-    PDPRecordKeeperApplication recordKeeper;
+    PDPRecordKeeper recordKeeper;
     uint256 testSetId;
 
     function setUp() public {
         pdpService = new SumTreeInternalTestPDPService(100); // Assuming 100 as challengeFinality
-        recordKeeper = new PDPRecordKeeperApplication(address(pdpService));
+        recordKeeper = new PDPRecordKeeper(address(pdpService));
         testSetId = pdpService.createProofSet(address(recordKeeper));
     }
 
@@ -1013,7 +1012,7 @@ contract RecordKeeperHelper is Test {
     }
 
     function assertProofSetRecords(uint256 setId) public view {
-        PDPRecordKeeperApplication.EventRecord[] memory records = PDPRecordKeeperApplication(recordKeeper).listEvents(setId);
+        PDPRecordKeeper.EventRecord[] memory records = PDPRecordKeeper(recordKeeper).listEvents(setId);
         assertEq(expectedRecords[setId].length, records.length, "Incorrect number of records");
         for (uint256 i = 0; i < records.length; i++) {
             assertEq(uint(records[i].operationType), uint(expectedRecords[setId][i]), "Incorrect operation type");
@@ -1036,7 +1035,7 @@ contract RecordKeeperHelper is Test {
             abi.decode(extraData, (uint256, uint256));
         } else if (operationType == PDPListener.OperationType.DELETE) {
             abi.decode(extraData, (uint256));
-        } else if (operationType == PDPApplication.OperationType.NEXT_PROVING_PERIOD) {
+        } else if (operationType == PDPListener.OperationType.NEXT_PROVING_PERIOD) {
             assertEq(extraData, bytes(""));
         } else {
             revert("Unknown operation type");
@@ -1105,12 +1104,12 @@ contract RecordKeeperIntegrationTest is Test {
 
 contract PDPServiceE2ETest is Test, ProofBuilderHelper {
     PDPService pdpService;
-    PDPRecordKeeperApplication recordKeeper;
+    PDPRecordKeeper recordKeeper;
     uint256 constant challengeFinalityDelay = 2;
 
     function setUp() public {
         pdpService = new PDPService(challengeFinalityDelay);
-        recordKeeper = new PDPRecordKeeperApplication(address(pdpService));
+        recordKeeper = new PDPRecordKeeper(address(pdpService));
     }
 
     function testCompleteProvingPeriodE2E() public {
