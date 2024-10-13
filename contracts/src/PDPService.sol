@@ -4,6 +4,10 @@ pragma solidity ^0.8.20;
 import {BitOps} from "./BitOps.sol";
 import {Cids} from "./Cids.sol";
 import {MerkleVerify} from "./Proofs.sol";
+import "../lib/openzeppelin-contracts/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "../lib/openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
+import "../lib/openzeppelin-contracts/contracts/access/Ownable.sol";
+
 
 interface PDPListener {
     enum OperationType {
@@ -24,7 +28,7 @@ interface PDPListener {
     ) external;
 }
 
-contract PDPService {
+contract PDPService is Initializable, UUPSUpgradeable, Ownable {
     // Constants
     address public constant BURN_ACTOR = 0xff00000000000000000000000000000000000063;
     uint256 public constant LEAF_SIZE = 32;
@@ -112,7 +116,10 @@ contract PDPService {
     
 
     // Methods
-    constructor(uint256 _challengeFinality) {
+    // Note: no constructor, use initialize()
+    function initialize(uint256 _challengeFinality) public initializer {
+        __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
         challengeFinality = _challengeFinality;
     }
 
