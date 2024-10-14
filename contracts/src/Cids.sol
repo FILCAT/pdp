@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 library Cids {
-    // TODO PERF: https://github.com/FILCAT/pdp/issues/16#issuecomment-2329836995 
+    // TODO PERF: https://github.com/FILCAT/pdp/issues/16#issuecomment-2329836995
     struct Cid {
         bytes data;
     }
@@ -14,8 +14,8 @@ library Cids {
         for (uint i = 0; i < 32; i++) {
             dataSlice[i] = cid.data[cid.data.length - 32 + i];
         }
-        return bytes32(dataSlice);   
-        // See https://github.com/FILCAT/pdp/issues/15 performance measurement and improvement
+        return bytes32(dataSlice);
+        // See https://github.com/FILCAT/pdp/issues/16 performance improvement
         // The above can almost certainly be optimised in assembly.
         // However, the below assembly behaves differently and is beyond my ability to resolve.
         // assembly {

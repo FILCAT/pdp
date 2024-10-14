@@ -130,7 +130,7 @@ contract PDPServiceOwnershipTest is Test {
         (address ownerStart, address proposedOwnerStart) = pdpService.getProofSetOwner(setId);
         assertEq(ownerStart, owner, "Proof set owner should be the constructor sender");
         assertEq(proposedOwnerStart, nextOwner, "Proof set proposed owner should make the one proposed");
-        vm.prank(nextOwner); 
+        vm.prank(nextOwner);
         pdpService.claimProofSetOwnership(setId);
         (address ownerEnd, address proposedOwnerEnd) = pdpService.getProofSetOwner(setId);
         assertEq(ownerEnd, nextOwner, "Proof set owner should be the next owner");
@@ -190,7 +190,7 @@ contract PDPServiceProofSetMutateTest is Test {
         roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         uint256 rootId = pdpService.addRoots(setId, roots);
         recordAssert.expectRecord(PDPListener.OperationType.ADD, setId);
-        
+
         uint256 leafCount = roots[0].rawSize / 32;
         assertEq(pdpService.getProofSetLeafCount(setId), leafCount);
         assertEq(pdpService.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
@@ -338,7 +338,7 @@ contract PDPServiceProofSetMutateTest is Test {
         assertEq(pdpService.getRootLeafCount(setId, 2), 0);
 
     }
-    
+
     function testRemoveBadRootDoesntFail() public {
         uint256 setId = pdpService.createProofSet(address(recordKeeper));
         recordAssert.expectRecord(PDPListener.OperationType.CREATE, setId);
@@ -401,14 +401,14 @@ contract PDPServiceProofTest is Test {
 
     function testLateProofAccepted() public {
         uint leafCount = 10;
-        (uint256 setId, bytes32[][] memory tree) = makeProofSetWithOneRoot(10);
+        (uint256 setId, bytes32[][] memory tree) = makeProofSetWithOneRoot(leafCount);
 
         // Advance chain short of challenge epoch
         uint256 challengeEpoch = pdpService.getNextChallengeEpoch(setId);
         vm.roll(challengeEpoch + 100);
 
         // Build a proof.
-        PDPService.Proof[] memory proofs = buildProofsForSingleton(setId, 1, tree, leafCount);
+        PDPService.Proof[] memory proofs = buildProofsForSingleton(setId, 3, tree, leafCount);
 
         // Submit proof.
         pdpService.provePossession(setId, proofs);
@@ -420,14 +420,14 @@ contract PDPServiceProofTest is Test {
 
     function testEarlyProofRejected() public {
         uint leafCount = 10;
-        (uint256 setId, bytes32[][] memory tree) = makeProofSetWithOneRoot(10);
+        (uint256 setId, bytes32[][] memory tree) = makeProofSetWithOneRoot(leafCount);
 
         // Advance chain short of challenge epoch
         uint256 challengeEpoch = pdpService.getNextChallengeEpoch(setId);
         vm.roll(challengeEpoch - 1);
 
         // Build a proof.
-        PDPService.Proof[] memory proofs = buildProofsForSingleton(setId, 1, tree, leafCount);
+        PDPService.Proof[] memory proofs = buildProofsForSingleton(setId, 3, tree, leafCount);
 
         // Submit proof.
         vm.expectRevert();
@@ -454,12 +454,12 @@ contract PDPServiceProofTest is Test {
 
     function testBadChallengeRejected() public {
         uint leafCount = 10;
-        (uint256 setId, bytes32[][] memory tree) = makeProofSetWithOneRoot(10);
+        (uint256 setId, bytes32[][] memory tree) = makeProofSetWithOneRoot(leafCount);
 
         // Make a proof that's good for this challenge epoch.
         uint256 challengeEpoch = pdpService.getNextChallengeEpoch(setId);
         vm.roll(challengeEpoch);
-        PDPService.Proof[] memory proofs = buildProofsForSingleton(setId, 1, tree, leafCount);
+        PDPService.Proof[] memory proofs = buildProofsForSingleton(setId, 3, tree, leafCount);
 
         // Submit proof successfully, advancing the proof set to a new challenge epoch.
         pdpService.provePossession(setId, proofs);
@@ -468,7 +468,7 @@ contract PDPServiceProofTest is Test {
         uint nextChallengeEpoch = pdpService.getNextChallengeEpoch(setId);
         assertNotEq(nextChallengeEpoch, challengeEpoch);
         vm.roll(nextChallengeEpoch);
-        
+
         // The proof for the old challenge epoch should no longer be valid.
         vm.expectRevert();
         pdpService.provePossession(setId, proofs);
@@ -478,7 +478,7 @@ contract PDPServiceProofTest is Test {
     function testBadRootsRejected() public {
         uint[] memory leafCounts = new uint[](2);
         // Note: either co-prime leaf counts or a challenge count > 1 are required for this test to demonstrate the failing proof.
-        // With a challenge count == 1 and leaf counts e.g. 10 and 20 it just so happens that the first computed challenge index is the same 
+        // With a challenge count == 1 and leaf counts e.g. 10 and 20 it just so happens that the first computed challenge index is the same
         // (lying in the first root) whether the tree has one or two roots.
         // This could be prevented if the challenge index calculation included some marker of proof set contents, like
         // a hash of all the roots or an edit sequence number.
@@ -492,19 +492,18 @@ contract PDPServiceProofTest is Test {
         // Make a proof that's good for the single root.
         uint256 challengeEpoch = pdpService.getNextChallengeEpoch(setId);
         vm.roll(challengeEpoch);
-        uint challengeCount = 1;
-        PDPService.Proof[] memory proofsOneRoot = buildProofsForSingleton(setId, challengeCount, trees[0], leafCounts[0]);
+        PDPService.Proof[] memory proofsOneRoot = buildProofsForSingleton(setId, 3, trees[0], leafCounts[0]);
 
         // Add another root before submitting the proof.
         uint256 newRootId;
         (trees[1], newRootId) = addOneRoot(setId, leafCounts[1]);
-        
+
         // The proof for one root should be invalid against the set with two.
         vm.expectRevert();
         pdpService.provePossession(setId, proofsOneRoot);
 
         // Make a new proof that is valid with two roots
-        PDPService.Proof[] memory proofsTwoRoots = buildProofs(setId, challengeCount, trees, leafCounts);
+        PDPService.Proof[] memory proofsTwoRoots = buildProofs(setId, 1, trees, leafCounts);
         uint256[] memory removeRoots = new uint256[](1);
         removeRoots[0] = newRootId;
         pdpService.removeRoots(setId, removeRoots);
@@ -598,13 +597,12 @@ contract PDPServiceProofTest is Test {
         for (uint i = 0; i < leafCounts.length; ++i) {
             totalLeafCount += leafCounts[i];
         }
-        
+
         PDPService.Proof[] memory proofs = new PDPService.Proof[](challengeCount);
         for (uint challengeIdx = 0; challengeIdx < challengeCount; challengeIdx++) {
             // Compute challenge index
             bytes memory payload = abi.encodePacked(seed, setId, uint64(challengeIdx));
             uint256 challengeOffset = uint256(keccak256(payload)) % totalLeafCount;
-
             uint treeIdx = 0;
             uint256 treeOffset = 0;
             for (uint i = 0; i < leafCounts.length; ++i) {
@@ -620,14 +618,7 @@ contract PDPServiceProofTest is Test {
             bytes32[][] memory tree = trees[treeIdx];
             bytes32[] memory path = MerkleProve.buildProof(tree, treeOffset);
             proofs[challengeIdx] = PDPService.Proof(tree[tree.length - 1][treeOffset], path);
-
-            // console.log("Leaf", vm.toString(proofs[0].leaf));
-            // console.log("Proof");
-            // for (uint j = 0; j < proofs[0].proof.length; j++) {
-            //     console.log(vm.toString(j), vm.toString(proofs[0].proof[j]));
-            // }
         }
-
         return proofs;
     }
 
@@ -664,9 +655,9 @@ contract SumTreeHeightTest is Test {
     function testHeightFromIndex() public view {
         // https://oeis.org/A001511
         uint8[105] memory oeisA001511 = [
-            1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 6, 
-            1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 7, 
-            1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 6, 
+            1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 6,
+            1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 7,
+            1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 6,
             1, 2, 1, 3, 1, 2, 1, 4, 1
         ];
         for (uint256 i = 0; i < 105; i++) {
@@ -893,7 +884,7 @@ contract SumTreeAddTest is Test {
     function testFindRootIdTraverseOffTheEdgeAndBack() public {
         uint256[] memory sizes = new uint256[](5);
         sizes[0] = 1; // Remove
-        sizes[1] = 1; // Remove 
+        sizes[1] = 1; // Remove
         sizes[2] = 1; // Remove
         sizes[3] = 1;
         sizes[4] = 1;
@@ -1025,4 +1016,3 @@ contract RecordKeeperIntegrationTest is Test {
         pdpService.removeRoots(0, rootIds);
     }
 }
-
