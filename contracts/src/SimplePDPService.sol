@@ -15,10 +15,21 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
     // The address of the PDP service contract that is allowed to call this contract
     address public pdpServiceAddress;
 
+    enum OperationType {
+        NONE,
+        CREATE,
+        DELETE,
+        ADD,
+        REMOVE_SCHEDULED,
+        PROVE_POSSESSION,
+        NEXT_PROVING_PERIOD
+    }
+
     // Struct to store event details
     struct EventRecord {
         uint64 epoch;
-        PDPListener.OperationType operationType;
+        uint256 proofSetId;
+        OperationType operationType;
         bytes extraData;
     }
 
@@ -26,7 +37,7 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
     mapping(uint256 => EventRecord[]) public proofSetEvents;
 
     // Eth event emitted when a new record is added
-    event RecordAdded(uint256 indexed proofSetId, uint64 epoch, PDPListener.OperationType operationType);
+    event RecordAdded(uint256 indexed proofSetId, uint64 epoch, OperationType operationType);
 
      /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -48,15 +59,36 @@ require(_pdpServiceAddress != address(0), "PDP service address cannot be zero");
         _;
     }
 
-    // Function to add a new event record
-    function receiveProofSetEvent(
-        uint256 proofSetId,
-        uint64 epoch,
-        PDPListener.OperationType operationType,
-        bytes calldata extraData
-    ) external onlyPDPVerifier {
+    // Listener interface methods
+    function proofSetCreated(uint256 proofSetId, address creator) external onlyPDPVerifier {
+        receiveProofSetEvent(proofSetId, OperationType.CREATE, abi.encode(creator));
+    }
+
+    function proofSetDeleted(uint256 proofSetId, uint256 deletedLeafCount) external onlyPDPVerifier {
+        receiveProofSetEvent(proofSetId, OperationType.DELETE, abi.encode(deletedLeafCount));
+    }
+
+    function rootsAdded(uint256 proofSetId, uint256 firstAdded, PDPVerifier.RootData[] memory rootData) external onlyPDPVerifier {
+        receiveProofSetEvent(proofSetId, OperationType.ADD, abi.encode(firstAdded, rootData));
+    }
+
+    function rootsScheduledRemove(uint256 proofSetId, uint256[] memory rootIds) external onlyPDPVerifier {
+        receiveProofSetEvent(proofSetId, OperationType.REMOVE_SCHEDULED, abi.encode(rootIds));
+    }
+
+    function posessionProven(uint256 proofSetId, uint256 challengedLeafCount, uint256 seed, uint256 challengeCount) external onlyPDPVerifier {
+        receiveProofSetEvent(proofSetId, OperationType.PROVE_POSSESSION, abi.encode(challengedLeafCount, seed, challengeCount));
+    }
+
+    function nextProvingPeriod(uint256 proofSetId, uint256 leafCount) external onlyPDPVerifier {
+        receiveProofSetEvent(proofSetId, OperationType.NEXT_PROVING_PERIOD, abi.encode(leafCount));
+    }
+
+    function receiveProofSetEvent(uint256 proofSetId, OperationType operationType, bytes memory extraData ) internal {
+        uint64 epoch = uint64(block.number);
         EventRecord memory newRecord = EventRecord({
             epoch: epoch,
+            proofSetId: proofSetId,
             operationType: operationType,
             extraData: extraData
         });
@@ -70,10 +102,10 @@ require(_pdpServiceAddress != address(0), "PDP service address cannot be zero");
     }
 
     // Function to get a specific event for a proof set
-    function getEvent(uint256 proofSetId, uint256 eventIndex) 
-        external 
-        view 
-        returns (EventRecord memory) 
+    function getEvent(uint256 proofSetId, uint256 eventIndex)
+        external
+        view
+        returns (EventRecord memory)
     {
         require(eventIndex < proofSetEvents[proofSetId].length, "Event index out of bounds");
         return proofSetEvents[proofSetId][eventIndex];
