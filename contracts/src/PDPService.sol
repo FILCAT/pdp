@@ -285,11 +285,13 @@ contract PDPService {
     }
 
     function scheduleRemovals(uint256 setId, uint256[] calldata rootIds) public {
-        require(rootIds.length + scheduledRemovals[setId].length <= MAX_ENQUEUED_REMOVALS, "Too many removals wait for next proving period to schedule");
-        require(proofSetOwner[setId] == msg.sender, "Only the owner can schedule removal of roots");
         require(proofSetLive(setId), "Proof set not live");
+        require(proofSetOwner[setId] == msg.sender, "Only the owner can schedule removal of roots");
+        require(rootIds.length + scheduledRemovals[setId].length <= MAX_ENQUEUED_REMOVALS, "Too many removals wait for next proving period to schedule");
+
         uint256 totalDelta = 0;
         for (uint256 i = 0; i < rootIds.length; i++){
+            require(rootIds[i] < nextRootId[setId], "Can only schedule removal of existing roots");
             totalDelta += rootLeafCounts[setId][rootIds[i]];
             scheduledRemovals[setId].push(rootIds[i]);
         }
