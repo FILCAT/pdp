@@ -204,6 +204,35 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             result[i] = removals[i];
         }
         return result;
+    // Returns the service fee for a given proof set, duration, and size
+    // Size measured in leaves (32 byte chunks), duration measured in epochs
+    function serviceFee(uint256 duration, uint256 size) public pure returns (uint256) {
+        // 1 FIL / TiB / month ~ revenue 
+        // 86,400 epochs / month
+        // 2^35 leafs / TiB
+        // fee is 1% of revenue
+        uint256 revenueUSDNum = 35;
+        uint256 revenueUSDDenom = 10;
+        uint256 filPriceUSDNum = 35; // In the future we can fetch this from a price oracle
+        uint256 filPriceUSDDenom = 10;
+
+        uint256 numerator = 10^18 * revenueUSDNum * filPriceUSDNum * size * duration;
+        uint256 denominator = revenueUSDDenom * filPriceUSDDenom * 2^35 * 86400 * 100;
+        return numerator / denominator;
+    }
+
+    function proofFee(uint256 challengeCount) public view returns (uint256) {
+        uint256 proofGasFloor = 2_000_000;
+        uint256 oneNanoFIL = 10^9;
+        uint256 gasPrice;
+        if (block.basefee > oneNanoFIL) {
+            gasPrice = block.basefee;
+        } else {
+            gasPrice = oneNanoFIL;
+        }
+        uint256 numerator = 1 * proofGasFloor * challengeCount * gasPrice;
+        uint256 denominator = 100;
+        return numerator / denominator;
     }
 
     // owner proposes new owner.  If the owner proposes themself delete any outstanding proposed owner
