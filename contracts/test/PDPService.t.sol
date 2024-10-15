@@ -3,19 +3,26 @@ pragma solidity ^0.8.13;
 import {Test, console} from "forge-std/Test.sol";
 import {Cids} from "../src/Cids.sol";
 import {PDPService, PDPListener} from "../src/PDPService.sol";
+import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
 import {MerkleProve} from "../src/Proofs.sol";
 import {ProofUtil} from "./ProofUtil.sol";
 import {PDPRecordKeeper} from "../src/PDPRecordKeeper.sol";
 
 
 contract PDPServiceProofSetCreateDeleteTest is Test {
-    PDPService pdpService;
     PDPRecordKeeper recordKeeper;
     RecordKeeperHelper recordAssert;
+    PDPService pdpService;
 
     function setUp() public {
-        pdpService = new PDPService();
-        pdpService.initialize(2);
+        PDPService pdpServiceImpl = new PDPService();
+        uint256 challengeFinality = 2;
+        bytes memory initializeData = abi.encodeWithSelector(
+            PDPService.initialize.selector,
+            challengeFinality
+        );
+        MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpServiceImpl), initializeData);
+        pdpService = PDPService(address(proxy));
         recordKeeper = new PDPRecordKeeper(address(pdpService));
         recordAssert = new RecordKeeperHelper(address(recordKeeper));
     }
@@ -117,8 +124,14 @@ contract PDPServiceOwnershipTest is Test {
     address public nonOwner;
 
     function setUp() public {
-        pdpService = new PDPService();
-        pdpService.initialize(2);
+        PDPService pdpServiceImpl = new PDPService();
+
+        bytes memory initializeData = abi.encodeWithSelector(
+            PDPService.initialize.selector,
+            2
+        );
+        MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpServiceImpl), initializeData);
+        pdpService = PDPService(address(proxy));
         recordKeeper = new PDPRecordKeeper(address(pdpService));
 
         owner = address(this);
@@ -191,8 +204,13 @@ contract PDPServiceProofSetMutateTest is Test {
     RecordKeeperHelper recordAssert;
 
     function setUp() public {
-        pdpService = new PDPService();
-        pdpService.initialize(challengeFinalityDelay);
+        PDPService pdpServiceImpl = new PDPService();
+        bytes memory initializeData = abi.encodeWithSelector(
+            PDPService.initialize.selector,
+            challengeFinalityDelay
+        );
+        MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpServiceImpl), initializeData);
+        pdpService = PDPService(address(proxy));
         recordKeeper = new PDPRecordKeeper(address(pdpService));
         recordAssert = new RecordKeeperHelper(address(recordKeeper));
     }
@@ -424,8 +442,13 @@ contract PDPServiceProofTest is Test {
     RecordKeeperHelper recordAssert;
 
     function setUp() public {
-        pdpService = new PDPService();
-        pdpService.initialize(challengeFinalityDelay);
+        PDPService pdpServiceImpl = new PDPService();
+        bytes memory initializeData = abi.encodeWithSelector(
+            PDPService.initialize.selector,
+            challengeFinalityDelay
+        );
+        MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpServiceImpl), initializeData);
+        pdpService = PDPService(address(proxy));
         recordKeeper = new PDPRecordKeeper(address(pdpService));
         recordAssert = new RecordKeeperHelper(address(recordKeeper));
     }
@@ -978,12 +1001,9 @@ contract PDPServiceProofTest is Test, ProofBuilderHelper {
 }
 
 contract SumTreeInternalTestPDPService is PDPService {
-    constructor(uint256 _challengeFinality) {
-        PDPService pdpService = new PDPService();
-        pdpService.initialize(_challengeFinality);
+    constructor() {
     }
-
-    function testHeightFromIndex(uint256 index) public pure returns (uint256) {
+    function getTestHeightFromIndex(uint256 index) public pure returns (uint256) {
         return heightFromIndex(index);
     }
 
@@ -996,7 +1016,13 @@ contract SumTreeHeightTest is Test {
     SumTreeInternalTestPDPService pdpService;
 
     function setUp() public {
-        pdpService = new SumTreeInternalTestPDPService(2);
+        PDPService pdpServiceImpl = new SumTreeInternalTestPDPService();
+        bytes memory initializeData = abi.encodeWithSelector(
+            PDPService.initialize.selector,
+            2
+        );
+        MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpServiceImpl), initializeData);
+        pdpService = SumTreeInternalTestPDPService(address(proxy));
     }
 
     function testHeightFromIndex() public view {
@@ -1008,7 +1034,7 @@ contract SumTreeHeightTest is Test {
             1, 2, 1, 3, 1, 2, 1, 4, 1
         ];
         for (uint256 i = 0; i < 105; i++) {
-            assertEq(uint256(oeisA001511[i]), pdpService.testHeightFromIndex(i) + 1, "Heights from index 0 to 104 should match OEIS A001511");
+            assertEq(uint256(oeisA001511[i]), pdpService.getTestHeightFromIndex(i) + 1, "Heights from index 0 to 104 should match OEIS A001511");
         }
     }
 }
@@ -1025,7 +1051,13 @@ contract SumTreeAddTest is Test {
     uint256 testSetId;
 
     function setUp() public {
-        pdpService = new SumTreeInternalTestPDPService(100); // Assuming 100 as challengeFinality
+        PDPService pdpServiceImpl = new SumTreeInternalTestPDPService();
+        bytes memory initializeData = abi.encodeWithSelector(
+            PDPService.initialize.selector,
+            100
+        );
+        MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpServiceImpl), initializeData);
+        pdpService = SumTreeInternalTestPDPService(address(proxy));
         recordKeeper = new PDPRecordKeeper(address(pdpService));
         testSetId = pdpService.createProofSet(address(recordKeeper));
     }
@@ -1321,8 +1353,13 @@ contract RecordKeeperIntegrationTest is Test {
     BadRecordKeeper badRecordKeeper;
 
     function setUp() public {
-        pdpService = new PDPService();
-        pdpService.initialize(2);
+        PDPService pdpServiceImpl = new PDPService();
+        bytes memory initializeData = abi.encodeWithSelector(
+            PDPService.initialize.selector,
+            2
+        );
+        MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpServiceImpl), initializeData);
+        pdpService = PDPService(address(proxy));
     }
 
     function testRecordKeeperPropagatesErrors() public {

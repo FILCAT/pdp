@@ -115,7 +115,12 @@ contract PDPService is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     mapping(uint256 => address) proofSetProposedOwner;
 
     // Methods
-    // Note: no constructor, use initialize()
+    
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+     _disableInitializers();
+    }
+
     function initialize(uint256 _challengeFinality) public initializer {
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
