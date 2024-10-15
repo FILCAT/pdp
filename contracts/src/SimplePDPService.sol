@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 
-import {PDPService, PDPListener} from "./PDPService.sol";
+import {PDPVerifier, PDPListener} from "./PDPVerifier.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
 
-// PDPRecordKeeperApplication is a default implementation of a PDP Application.
+// SimplePDPServiceApplication is a default implementation of a PDP Application.
 // It maintains a record of all events that have occurred in the PDP service,
 // and provides a way to query these events.
 // This contract only supports one PDP service caller, set in the constructor.
-contract PDPRecordKeeper is PDPListener, Initializable, UUPSUpgradeable, OwnableUpgradeable {
+contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // The address of the PDP service contract that is allowed to call this contract
     address public pdpServiceAddress;
 
@@ -42,9 +42,9 @@ require(_pdpServiceAddress != address(0), "PDP service address cannot be zero");
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    // Modifier to ensure only the PDP service contract can call certain functions
-    modifier onlyPDPService() {
-        require(msg.sender == pdpServiceAddress, "Caller is not the PDP service");
+    // Modifier to ensure only the PDP verifier contract can call certain functions
+    modifier onlyPDPVerifier() {
+        require(msg.sender == pdpServiceAddress, "Caller is not the PDP verifier");
         _;
     }
 
@@ -54,7 +54,7 @@ require(_pdpServiceAddress != address(0), "PDP service address cannot be zero");
         uint64 epoch,
         PDPListener.OperationType operationType,
         bytes calldata extraData
-    ) external onlyPDPService {
+    ) external onlyPDPVerifier {
         EventRecord memory newRecord = EventRecord({
             epoch: epoch,
             operationType: operationType,
