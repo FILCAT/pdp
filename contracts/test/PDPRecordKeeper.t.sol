@@ -4,6 +4,8 @@ pragma solidity ^0.8.13;
 import {Test, console} from "forge-std/Test.sol";
 import {PDPRecordKeeper} from "../src/PDPRecordKeeper.sol";
 import {PDPListener} from "../src/PDPService.sol";
+import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
+
 
 contract PDPRecordKeeperTest is Test {
     PDPRecordKeeper public recordKeeper;
@@ -11,7 +13,10 @@ contract PDPRecordKeeperTest is Test {
 
     function setUp() public {
         pdpServiceAddress = address(this);
-        recordKeeper = new PDPRecordKeeper(pdpServiceAddress);
+        PDPRecordKeeper recordKeeperImpl = new PDPRecordKeeper();
+        bytes memory initializeData = abi.encodeWithSelector(PDPRecordKeeper.initialize.selector, address(pdpServiceAddress));
+        MyERC1967Proxy recordKeeperProxy = new MyERC1967Proxy(address(recordKeeperImpl), initializeData);
+        recordKeeper = PDPRecordKeeper(address(recordKeeperProxy));
     }
 
     function testInitialState() public view {

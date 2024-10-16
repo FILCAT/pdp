@@ -23,7 +23,10 @@ contract PDPServiceProofSetCreateDeleteTest is Test {
         );
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpServiceImpl), initializeData);
         pdpService = PDPService(address(proxy));
-        recordKeeper = new PDPRecordKeeper(address(pdpService));
+        PDPRecordKeeper recordKeeperImpl = new PDPRecordKeeper();
+        initializeData = abi.encodeWithSelector(PDPRecordKeeper.initialize.selector, address(pdpService));
+        MyERC1967Proxy recordKeeperProxy = new MyERC1967Proxy(address(recordKeeperImpl), initializeData);
+        recordKeeper = PDPRecordKeeper(address(recordKeeperProxy)); 
         recordAssert = new RecordKeeperHelper(address(recordKeeper));
     }
     function tearDown() public view {
@@ -132,7 +135,10 @@ contract PDPServiceOwnershipTest is Test {
         );
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpServiceImpl), initializeData);
         pdpService = PDPService(address(proxy));
-        recordKeeper = new PDPRecordKeeper(address(pdpService));
+        PDPRecordKeeper recordKeeperImpl = new PDPRecordKeeper();
+        initializeData = abi.encodeWithSelector(PDPRecordKeeper.initialize.selector, address(pdpService));
+        MyERC1967Proxy recordKeeperProxy = new MyERC1967Proxy(address(recordKeeperImpl), initializeData);
+        recordKeeper = PDPRecordKeeper(address(recordKeeperProxy));
 
         owner = address(this);
         nextOwner = address(0x1234);
@@ -211,8 +217,10 @@ contract PDPServiceProofSetMutateTest is Test {
         );
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpServiceImpl), initializeData);
         pdpService = PDPService(address(proxy));
-        recordKeeper = new PDPRecordKeeper(address(pdpService));
-        recordAssert = new RecordKeeperHelper(address(recordKeeper));
+        PDPRecordKeeper recordKeeperImpl = new PDPRecordKeeper();
+        initializeData = abi.encodeWithSelector(PDPRecordKeeper.initialize.selector, address(pdpService));
+        MyERC1967Proxy recordKeeperProxy = new MyERC1967Proxy(address(recordKeeperImpl), initializeData);
+        recordKeeper = PDPRecordKeeper(address(recordKeeperProxy));        recordAssert = new RecordKeeperHelper(address(recordKeeper));
     }
 
     function tearDown() public view {
@@ -449,7 +457,10 @@ contract PDPServiceProofTest is Test {
         );
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpServiceImpl), initializeData);
         pdpService = PDPService(address(proxy));
-        recordKeeper = new PDPRecordKeeper(address(pdpService));
+        PDPRecordKeeper recordKeeperImpl = new PDPRecordKeeper();
+        initializeData = abi.encodeWithSelector(PDPRecordKeeper.initialize.selector, address(pdpService));
+        MyERC1967Proxy recordKeeperProxy = new MyERC1967Proxy(address(recordKeeperImpl), initializeData);
+        recordKeeper = PDPRecordKeeper(address(recordKeeperProxy));
         recordAssert = new RecordKeeperHelper(address(recordKeeper));
     }
 
@@ -1058,8 +1069,10 @@ contract SumTreeAddTest is Test {
         );
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpServiceImpl), initializeData);
         pdpService = SumTreeInternalTestPDPService(address(proxy));
-        recordKeeper = new PDPRecordKeeper(address(pdpService));
-        testSetId = pdpService.createProofSet(address(recordKeeper));
+        PDPRecordKeeper recordKeeperImpl = new PDPRecordKeeper();
+        initializeData = abi.encodeWithSelector(PDPRecordKeeper.initialize.selector, address(pdpService));
+        MyERC1967Proxy recordKeeperProxy = new MyERC1967Proxy(address(recordKeeperImpl), initializeData);
+        recordKeeper = PDPRecordKeeper(address(recordKeeperProxy));        testSetId = pdpService.createProofSet(address(recordKeeper));
     }
 
     function testMultiAdd() public {
@@ -1360,26 +1373,26 @@ contract RecordKeeperIntegrationTest is Test {
         );
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpServiceImpl), initializeData);
         pdpService = PDPService(address(proxy));
+        badRecordKeeper = new BadRecordKeeper();
     }
 
     function testRecordKeeperPropagatesErrors() public {
-        BadRecordKeeper recordKeeper = new BadRecordKeeper();
 
         // Can't create a proof set with a bad record keeper
-        recordKeeper.setBadOperation(PDPListener.OperationType.CREATE);
+        badRecordKeeper.setBadOperation(PDPListener.OperationType.CREATE);
         vm.expectRevert("Failing operation");
-        pdpService.createProofSet(address(recordKeeper));
+        pdpService.createProofSet(address(badRecordKeeper));
 
-        recordKeeper.setBadOperation(PDPListener.OperationType.NONE);
-        pdpService.createProofSet(address(recordKeeper));
+        badRecordKeeper.setBadOperation(PDPListener.OperationType.NONE);
+        pdpService.createProofSet(address(badRecordKeeper));
 
-        recordKeeper.setBadOperation(PDPListener.OperationType.ADD);
+        badRecordKeeper.setBadOperation(PDPListener.OperationType.ADD);
         PDPService.RootData[] memory roots = new PDPService.RootData[](1);
         roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 32);
         vm.expectRevert("Failing operation");
         pdpService.addRoots(0, roots);
 
-        recordKeeper.setBadOperation(PDPListener.OperationType.NONE);
+        badRecordKeeper.setBadOperation(PDPListener.OperationType.NONE);
         pdpService.addRoots(0, roots);
 
         recordKeeper.setBadOperation(PDPListener.OperationType.REMOVE_SCHEDULED);
