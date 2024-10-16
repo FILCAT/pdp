@@ -2,14 +2,18 @@
 pragma solidity ^0.8.20;
 
 import {PDPService, PDPListener} from "./PDPService.sol";
+import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
+import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
+
 
 // PDPRecordKeeperApplication is a default implementation of a PDP Application.
 // It maintains a record of all events that have occurred in the PDP service,
 // and provides a way to query these events.
 // This contract only supports one PDP service caller, set in the constructor.
-contract PDPRecordKeeper is PDPListener {
+contract PDPRecordKeeper is PDPListener, Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // The address of the PDP service contract that is allowed to call this contract
-    address public immutable pdpServiceAddress;
+    address public pdpServiceAddress;
 
     // Struct to store event details
     struct EventRecord {
@@ -24,10 +28,19 @@ contract PDPRecordKeeper is PDPListener {
     // Eth event emitted when a new record is added
     event RecordAdded(uint256 indexed proofSetId, uint64 epoch, PDPListener.OperationType operationType);
 
-    constructor(address _pdpServiceAddress) {
-        require(_pdpServiceAddress != address(0), "PDP service address cannot be zero");
+     /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+     _disableInitializers();
+    }
+
+    function initialize(address _pdpServiceAddress) public initializer {
+        __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
+require(_pdpServiceAddress != address(0), "PDP service address cannot be zero");
         pdpServiceAddress = _pdpServiceAddress;
     }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     // Modifier to ensure only the PDP service contract can call certain functions
     modifier onlyPDPService() {
