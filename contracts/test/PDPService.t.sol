@@ -212,7 +212,7 @@ contract PDPServiceProofSetMutateTest is Test {
         uint256 leafCount = roots[0].rawSize / 32;
         assertEq(pdpService.getProofSetLeafCount(setId), leafCount);
         assertEq(pdpService.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
-        assertEq(pdpService.getLastChallengedLeaf(setId), leafCount);
+        assertEq(pdpService.getChallengeRange(setId), leafCount);
 
         assertTrue(pdpService.rootLive(setId, rootId));
         assertEq(pdpService.getRootCid(setId, rootId).data, roots[0].root.data);
@@ -366,28 +366,49 @@ contract PDPServiceProofSetMutateTest is Test {
         assertEq(pdpService.getRootLeafCount(setId, 2), 0);
 
     }
-
-    function testRemoveBadRootDoesntFail() public {
+    
+    function testRemoveFutureRoots() public {
         uint256 setId = pdpService.createProofSet(address(recordKeeper));
         recordAssert.expectRecord(PDPListener.OperationType.CREATE, setId);
         PDPService.RootData[] memory roots = new PDPService.RootData[](1);
         roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         pdpService.addRoots(setId, roots);
         recordAssert.expectRecord(PDPListener.OperationType.ADD, setId);
-        uint256[] memory toRemove = new uint256[](1);
-        toRemove[0] = 1;
-        toRemove[0] = 0;
+        assertEq(true, pdpService.rootChallengable(setId, 0));
+        uint256[] memory toRemove = new uint256[](2);
+
+        // Scheduling an un-added root for removal should fail
+        toRemove[0] = 0; // current (unchallengeable) root
+        toRemove[1] = 1; // future root
+        vm.expectRevert("Can only schedule removal of existing roots");
         pdpService.scheduleRemovals(setId, toRemove);
         recordAssert.expectRecord(PDPListener.OperationType.REMOVE_SCHEDULED, setId);
         // Actual removal does not fail
-        pdpService.nextProvingPeriod(setId); 
+        pdpService.nextProvingPeriod(setId); // root 0 is now challengable
+        recordAssert.expectRecord(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
+
+        // Scheduling both unchallengeable and challengeable roots for removal succeeds
+        // scheduling duplicate ids in both cases succeeds
+        uint256[] memory toRemove2 = new uint256[](4);
+        pdpService.addRoots(setId, roots);
+        recordAssert.expectRecord(PDPListener.OperationType.ADD, setId);
+        toRemove2[0] = 0; // current challengeable root
+        toRemove2[1] = 1; // current unchallengeable root
+        toRemove2[2] = 0; // duplicate challengeable
+        toRemove2[3] = 1; // duplicate unchallengeable
+        // state exists for both roots
+        assertEq(true, pdpService.rootLive(setId, 0));
+        assertEq(true, pdpService.rootLive(setId, 1));
+        // only root 0 is challengeable
+        assertEq(true, pdpService.rootChallengable(setId, 0));
+        assertEq(false, pdpService.rootChallengable(setId, 1));
+        pdpService.scheduleRemovals(setId, toRemove2);
+        recordAssert.expectRecord(PDPListener.OperationType.REMOVE_SCHEDULED, setId);
+        pdpService.nextProvingPeriod(setId);
         recordAssert.expectRecord(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
 
         assertEq(false, pdpService.rootLive(setId, 0));
-
-        // Removing again fails
-        pdpService.scheduleRemovals(setId, toRemove);
-        assertEq(false, pdpService.rootLive(setId, 0));
+        assertEq(false, pdpService.rootLive(setId, 1));
     }
 }
 
@@ -578,7 +599,6 @@ contract PDPServiceProofTest is Test, ProofBuilderHelper {
         PDPService.Proof[] memory proofsOneRoot = buildProofsForSingleton(setId, 3, trees[0], leafCounts[0]);
 
         // The proof for one root should be invalid against the set with two.
-        console.log("The proof for one root should be invalid against the set with two.");
         vm.expectRevert();
         pdpService.provePossession(setId, proofsOneRoot);
 
@@ -597,12 +617,10 @@ contract PDPServiceProofTest is Test, ProofBuilderHelper {
 
         // A proof for two roots should be invalid against the set with one.
         proofsTwoRoots = buildProofs(pdpService, setId, challengeCount, trees, leafCounts); // regen as removal forced resampling challenge seed
-        console.log("The proof for two roots should be invalid against the set with one.");
         vm.expectRevert();
         pdpService.provePossession(setId, proofsTwoRoots);
 
         // But the single root proof is now good again.
-        console.log("The single root proof is now good again.");
         proofsOneRoot = buildProofsForSingleton(setId, challengeCount, trees[0], leafCounts[0]); // regen as removal forced resampling challenge seed
         pdpService.provePossession(setId, proofsOneRoot);
         recordAssert.expectRecord(PDPListener.OperationType.PROVE_POSSESSION, setId);
@@ -1028,9 +1046,8 @@ contract RecordKeeperHelper is Test {
         } else if (operationType == PDPListener.OperationType.ADD) {
             abi.decode(extraData, (uint256,PDPService.RootData[]));
         } else if (operationType == PDPListener.OperationType.REMOVE_SCHEDULED) {
-            (uint256 totalDelta, uint256[] memory rootIds) = abi.decode(extraData, (uint256, uint256[]));
+            (uint256[] memory rootIds) = abi.decode(extraData, (uint256[]));
             require(rootIds.length > 0, "REMOVE_SCHEDULED: rootIds should not be empty");
-            require(totalDelta > 0, "REMOVE_SCHEDULED: totalDelta should be > 0");
         } else if (operationType == PDPListener.OperationType.PROVE_POSSESSION) {
             abi.decode(extraData, (uint256, uint256));
         } else if (operationType == PDPListener.OperationType.DELETE) {
@@ -1131,8 +1148,8 @@ contract PDPServiceE2ETest is Test, ProofBuilderHelper {
         rootsPP1[1] = PDPService.RootData(Cids.cidFromDigest("test2", treesA[1][0][0]), leafCountsA[1] * 32);
         pdpService.addRoots(setId, rootsPP1);
 
-        uint256 lastChallengedLeafPP1 = pdpService.getLastChallengedLeaf(setId);
-        assertEq(lastChallengedLeafPP1, pdpService.getProofSetLeafCount(setId), "Last challenged leaf should be total leaf count - 1");
+        uint256 challengeRangePP1 = pdpService.getChallengeRange(setId);
+        assertEq(challengeRangePP1, pdpService.getProofSetLeafCount(setId), "Last challenged leaf should be total leaf count - 1");
 
         // Step 3: Now that first challenge is set for sampling add more data `B` only in scope for the second proving period 
         uint256[] memory leafCountsB = new uint256[](2);
@@ -1154,7 +1171,7 @@ contract PDPServiceE2ETest is Test, ProofBuilderHelper {
         assertEq(pdpService.getRootLeafCount(setId, 3), leafCountsB[1], "Fourth root leaf count should be correct");
 
         // CHECK: last challenged leaf doesn't move
-        assertEq(pdpService.getLastChallengedLeaf(setId), lastChallengedLeafPP1, "Last challenged leaf should not move");
+        assertEq(pdpService.getChallengeRange(setId), challengeRangePP1, "Last challenged leaf should not move");
         assertEq(pdpService.getProofSetLeafCount(setId), leafCountsA[0] + leafCountsA[1] + leafCountsB[0] + leafCountsB[1], "Leaf count should only include non-removed roots");
 
 
@@ -1182,7 +1199,7 @@ contract PDPServiceE2ETest is Test, ProofBuilderHelper {
         assertEq(pdpService.getRootLeafCount(setId, 2), leafCountsB[0], "Third root leaf count should be the set leaf count");
         assertEq(pdpService.getRootLeafCount(setId, 3), 0, "Fourth root leaf count should be zeroed after removal");
         assertEq(pdpService.getProofSetLeafCount(setId), leafCountsA[0] + leafCountsB[0], "Leaf count should == size of non-removed roots");
-        assertEq(pdpService.getLastChallengedLeaf(setId), leafCountsA[0] + leafCountsB[0], "Last challenged leaf should be total leaf count");
+        assertEq(pdpService.getChallengeRange(setId), leafCountsA[0] + leafCountsB[0], "Last challenged leaf should be total leaf count");
 
         // CHECK: scheduled removals are processed
         assertEq(pdpService.getScheduledRemovals(setId), new uint256[](0), "Scheduled removals should be processed");
