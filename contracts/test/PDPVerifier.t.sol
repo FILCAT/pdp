@@ -10,8 +10,8 @@ import {SimplePDPService} from "../src/SimplePDPService.sol";
 
 
 contract PDPVerifierProofSetCreateDeleteTest is Test {
-    SimplePDPService recordKeeper;
-    RecordKeeperHelper recordAssert;
+    SimplePDPService listener;
+    ListenerHelper listenerAssert;
     PDPVerifier pdpVerifier;
 
     function setUp() public {
@@ -23,20 +23,20 @@ contract PDPVerifierProofSetCreateDeleteTest is Test {
         );
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
-        SimplePDPService recordKeeperImpl = new SimplePDPService();
+        SimplePDPService listenerImpl = new SimplePDPService();
         initializeData = abi.encodeWithSelector(SimplePDPService.initialize.selector, address(pdpVerifier));
-        MyERC1967Proxy recordKeeperProxy = new MyERC1967Proxy(address(recordKeeperImpl), initializeData);
-        recordKeeper = SimplePDPService(address(recordKeeperProxy)); 
-        recordAssert = new RecordKeeperHelper(address(recordKeeper));
+        MyERC1967Proxy listenerProxy = new MyERC1967Proxy(address(listenerImpl), initializeData);
+        listener = SimplePDPService(address(listenerProxy)); 
+        listenerAssert = new ListenerHelper(address(listener));
     }
     function tearDown() public view {
-        recordAssert.assertAllRecords();
+        listenerAssert.assertAllEvents();
     }
 
     function testCreateProofSet() public {
         Cids.Cid memory zeroRoot;
-        uint256 setId = pdpVerifier.createProofSet(address(pdpVerifier));
-        recordAssert.expectRecord(PDPListener.OperationType.CREATE, setId);
+        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        listenerAssert.expectEvent(PDPListener.OperationType.CREATE, setId);
         assertEq(setId, 0, "First proof set ID should be 0");
         assertEq(pdpVerifier.getProofSetLeafCount(setId), 0, "Proof set leaf count should be 0");
 
@@ -53,18 +53,18 @@ contract PDPVerifierProofSetCreateDeleteTest is Test {
     }
 
     function testDeleteProofSet() public {
-        uint256 setId = pdpVerifier.createProofSet(address(pdpVerifier));
-        recordAssert.expectRecord(PDPListener.OperationType.CREATE, setId);
+        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        listenerAssert.expectEvent(PDPListener.OperationType.CREATE, setId);
         pdpVerifier.deleteProofSet(setId);
-        recordAssert.expectRecord(PDPListener.OperationType.DELETE, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.DELETE, setId);
         vm.expectRevert("Proof set not live");
         pdpVerifier.getProofSetLeafCount(setId);
         tearDown();
     }
 
     function testOnlyOwnerCanDeleteProofSet() public {
-        uint256 setId = pdpVerifier.createProofSet(address(pdpVerifier));
-        recordAssert.expectRecord(PDPListener.OperationType.CREATE, setId);
+        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        listenerAssert.expectEvent(PDPListener.OperationType.CREATE, setId);
         // Create a new address to act as a non-owner
         address nonOwner = address(0x1234);
         // Expect revert when non-owner tries to delete the proof set
@@ -74,7 +74,7 @@ contract PDPVerifierProofSetCreateDeleteTest is Test {
 
         // Now verify the owner can delete the proof set
         pdpVerifier.deleteProofSet(setId);
-        recordAssert.expectRecord(PDPListener.OperationType.DELETE, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.DELETE, setId);
         vm.expectRevert("Proof set not live");
         pdpVerifier.getProofSetOwner(setId);
         tearDown();
@@ -88,10 +88,10 @@ contract PDPVerifierProofSetCreateDeleteTest is Test {
     }
 
     function testMethodsOnDeletedProofSetFails() public {
-        uint256 setId = pdpVerifier.createProofSet(address(pdpVerifier));
-        recordAssert.expectRecord(PDPListener.OperationType.CREATE, setId);
+        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        listenerAssert.expectEvent(PDPListener.OperationType.CREATE, setId);
         pdpVerifier.deleteProofSet(setId);
-        recordAssert.expectRecord(PDPListener.OperationType.DELETE, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.DELETE, setId);
         vm.expectRevert("Only the owner can delete proof sets");
         pdpVerifier.deleteProofSet(setId);
         vm.expectRevert("Proof set not live");
@@ -110,10 +110,10 @@ contract PDPVerifierProofSetCreateDeleteTest is Test {
     }
 
     function testGetProofSetID() public {
-        pdpVerifier.createProofSet(address(pdpVerifier));
-        recordAssert.expectRecord(PDPListener.OperationType.CREATE, 0);
-        pdpVerifier.createProofSet(address(pdpVerifier));
-        recordAssert.expectRecord(PDPListener.OperationType.CREATE, 1);
+        pdpVerifier.createProofSet(address(listener));
+        listenerAssert.expectEvent(PDPListener.OperationType.CREATE, 0);
+        pdpVerifier.createProofSet(address(listener));
+        listenerAssert.expectEvent(PDPListener.OperationType.CREATE, 1);
         assertEq(2, pdpVerifier.getNextProofSetId(), "Next proof set ID should be 2");
         tearDown();
     }
@@ -121,7 +121,7 @@ contract PDPVerifierProofSetCreateDeleteTest is Test {
 
 contract PDPVerifierOwnershipTest is Test {
     PDPVerifier pdpVerifier;
-    SimplePDPService pdpVerifier;
+    SimplePDPService listener;
     address public owner;
     address public nextOwner;
     address public nonOwner;
@@ -134,10 +134,10 @@ contract PDPVerifierOwnershipTest is Test {
         );
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
-        SimplePDPService recordKeeperImpl = new SimplePDPService();
+        SimplePDPService listenerImpl = new SimplePDPService();
         initializeData = abi.encodeWithSelector(SimplePDPService.initialize.selector, address(pdpVerifier));
-        MyERC1967Proxy recordKeeperProxy = new MyERC1967Proxy(address(recordKeeperImpl), initializeData);
-        recordKeeper = SimplePDPService(address(recordKeeperProxy));
+        MyERC1967Proxy listenerProxy = new MyERC1967Proxy(address(listenerImpl), initializeData);
+        listener = SimplePDPService(address(listenerProxy));
 
         owner = address(this);
         nextOwner = address(0x1234);
@@ -145,7 +145,7 @@ contract PDPVerifierOwnershipTest is Test {
     }
 
     function testOwnershipTransfer() public {
-        uint256 setId = pdpVerifier.createProofSet(address(pdpVerifier));
+        uint256 setId = pdpVerifier.createProofSet(address(listener));
         pdpVerifier.proposeProofSetOwner(setId, nextOwner);
         (address ownerStart, address proposedOwnerStart) = pdpVerifier.getProofSetOwner(setId);
         assertEq(ownerStart, owner, "Proof set owner should be the constructor sender");
@@ -158,7 +158,7 @@ contract PDPVerifierOwnershipTest is Test {
     }
 
     function testOwnershipProposalReset() public {
-        uint256 setId = pdpVerifier.createProofSet(address(pdpVerifier));
+        uint256 setId = pdpVerifier.createProofSet(address(listener));
         pdpVerifier.proposeProofSetOwner(setId, nextOwner);
         pdpVerifier.proposeProofSetOwner(setId, owner);
         (address ownerEnd, address proposedOwnerEnd) = pdpVerifier.getProofSetOwner(setId);
@@ -167,7 +167,7 @@ contract PDPVerifierOwnershipTest is Test {
     }
 
     function testOwnershipPermissionsRequired() public {
-        uint256 setId = pdpVerifier.createProofSet(address(pdpVerifier));
+        uint256 setId = pdpVerifier.createProofSet(address(listener));
         vm.prank(nonOwner);
         vm.expectRevert("Only the current owner can propose a new owner");
         pdpVerifier.proposeProofSetOwner(setId, nextOwner);
@@ -186,7 +186,7 @@ contract PDPVerifierOwnershipTest is Test {
     }
 
     function testScheduleRemoveRootsOnlyOwner() public {
-        uint256 setId = pdpVerifier.createProofSet(address(recordKeeper));
+        uint256 setId = pdpVerifier.createProofSet(address(listener));
         Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test"));
         PDPVerifier.RootData[] memory rootDataArray = new PDPVerifier.RootData[](1);
         rootDataArray[0] = PDPVerifier.RootData(testCid, 100 * pdpVerifier.LEAF_SIZE());
@@ -205,8 +205,8 @@ contract PDPVerifierProofSetMutateTest is Test {
     uint256 constant challengeFinalityDelay = 2;
 
     PDPVerifier pdpVerifier;
-    SimplePDPService pdpVerifier;
-    SimplePDPServiceHelper recordAssert;
+    SimplePDPService listener;
+    ListenerHelper listenerAssert;
 
     function setUp() public {
         PDPVerifier pdpVerifierImpl = new PDPVerifier();
@@ -216,26 +216,27 @@ contract PDPVerifierProofSetMutateTest is Test {
         );
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
-        SimplePDPService recordKeeperImpl = new SimplePDPService();
+        SimplePDPService listenerImpl = new SimplePDPService();
         initializeData = abi.encodeWithSelector(SimplePDPService.initialize.selector, address(pdpVerifier));
-        MyERC1967Proxy recordKeeperProxy = new MyERC1967Proxy(address(recordKeeperImpl), initializeData);
-        recordKeeper = SimplePDPService(address(recordKeeperProxy));        recordAssert = new RecordKeeperHelper(address(recordKeeper));
+        MyERC1967Proxy listenerProxy = new MyERC1967Proxy(address(listenerImpl), initializeData);
+        listener = SimplePDPService(address(listenerProxy));        
+        listenerAssert = new ListenerHelper(address(listener));
     }
 
     function tearDown() public view {
-        recordAssert.assertAllRecords();
+        listenerAssert.assertAllEvents();
     }
 
     function testAddRoot() public {
-        uint256 setId = pdpVerifier.createProofSet(address(pdpVerifier));
-        recordAssert.expectRecord(PDPListener.OperationType.CREATE, setId);
+        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        listenerAssert.expectEvent(PDPListener.OperationType.CREATE, setId);
         PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
         roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         uint256 rootId = pdpVerifier.addRoots(setId, roots);
-        recordAssert.expectRecord(PDPListener.OperationType.ADD, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.ADD, setId);
         // flush add
         pdpVerifier.nextProvingPeriod(setId);
-        recordAssert.expectRecord(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
         
         uint256 leafCount = roots[0].rawSize / 32;
         assertEq(pdpVerifier.getProofSetLeafCount(setId), leafCount);
@@ -251,17 +252,17 @@ contract PDPVerifierProofSetMutateTest is Test {
     }
 
     function testAddMultipleRoots() public {
-        uint256 setId = pdpVerifier.createProofSet(address(pdpVerifier));
-        recordAssert.expectRecord(PDPListener.OperationType.CREATE, setId);
+        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        listenerAssert.expectEvent(PDPListener.OperationType.CREATE, setId);
         PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](2);
         roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test1")), 64);
         roots[1] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test2")), 128);
         uint256 firstId = pdpVerifier.addRoots(setId, roots);
-        recordAssert.expectRecord(PDPListener.OperationType.ADD, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.ADD, setId);
         assertEq(firstId, 0);
         // flush add
         pdpVerifier.nextProvingPeriod(setId);
-        recordAssert.expectRecord(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
 
         uint256 expectedLeafCount = roots[0].rawSize / 32 + roots[1].rawSize / 32;
         assertEq(pdpVerifier.getProofSetLeafCount(setId), expectedLeafCount);
@@ -283,7 +284,7 @@ contract PDPVerifierProofSetMutateTest is Test {
     }
 
     function testAddBadRoot() public {
-        uint256 setId = pdpVerifier.createProofSet(address(pdpVerifier));
+        uint256 setId = pdpVerifier.createProofSet(address(listener));
         PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
 
         // Fail when root size is not a multiple of 32
@@ -315,7 +316,7 @@ contract PDPVerifierProofSetMutateTest is Test {
 
     function testAddBadRootsBatched() public {
         // Add one bad root, message fails on bad index
-        uint256 setId = pdpVerifier.createProofSet(address(pdpVerifier));
+        uint256 setId = pdpVerifier.createProofSet(address(listener));
         PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](4);
         roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 32);
         roots[1] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 32);
@@ -333,22 +334,22 @@ contract PDPVerifierProofSetMutateTest is Test {
 
     function testRemoveRoot() public {
         // Add one root
-        uint256 setId = pdpVerifier.createProofSet(address(pdpVerifier));
-        recordAssert.expectRecord(PDPListener.OperationType.CREATE, setId);
+        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        listenerAssert.expectEvent(PDPListener.OperationType.CREATE, setId);
         PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
         roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         pdpVerifier.addRoots(setId, roots);
-        recordAssert.expectRecord(PDPListener.OperationType.ADD, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.ADD, setId);
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
 
         // Remove root
         uint256[] memory toRemove = new uint256[](1);
         toRemove[0] = 0;
         pdpVerifier.scheduleRemovals(setId, toRemove);
-        recordAssert.expectRecord(PDPListener.OperationType.REMOVE_SCHEDULED, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.REMOVE_SCHEDULED, setId);
 
         pdpVerifier.nextProvingPeriod(setId); // flush
-        recordAssert.expectRecord(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
 
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), 0);
         assertEq(pdpVerifier.rootLive(setId, 0), false);
@@ -360,21 +361,21 @@ contract PDPVerifierProofSetMutateTest is Test {
     }
 
     function testRemoveRootBatch() public {
-        uint256 setId = pdpVerifier.createProofSet(address(pdpVerifier));
-        recordAssert.expectRecord(PDPListener.OperationType.CREATE, setId);
+        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        listenerAssert.expectEvent(PDPListener.OperationType.CREATE, setId);
         PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](3);
         roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test1")), 64);
         roots[1] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test2")), 64);
         roots[2] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         pdpVerifier.addRoots(setId, roots);
-        recordAssert.expectRecord(PDPListener.OperationType.ADD, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.ADD, setId);
         uint256[] memory toRemove = new uint256[](2);
         toRemove[0] = 0;
         toRemove[1] = 2;
         pdpVerifier.scheduleRemovals(setId, toRemove);
-        recordAssert.expectRecord(PDPListener.OperationType.REMOVE_SCHEDULED, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.REMOVE_SCHEDULED, setId);
         pdpVerifier.nextProvingPeriod(setId); // flush
-        recordAssert.expectRecord(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
 
         assertEq(pdpVerifier.rootLive(setId, 0), false);
         assertEq(pdpVerifier.rootLive(setId, 1), true);
@@ -396,12 +397,12 @@ contract PDPVerifierProofSetMutateTest is Test {
     }
     
     function testRemoveFutureRoots() public {
-        uint256 setId = pdpVerifier.createProofSet(address(recordKeeper));
-        recordAssert.expectRecord(PDPListener.OperationType.CREATE, setId);
+        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        listenerAssert.expectEvent(PDPListener.OperationType.CREATE, setId);
         PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
         roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         pdpVerifier.addRoots(setId, roots);
-        recordAssert.expectRecord(PDPListener.OperationType.ADD, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.ADD, setId);
         assertEq(true, pdpVerifier.rootLive(setId, 0));
         assertEq(false, pdpVerifier.rootLive(setId, 1));
         uint256[] memory toRemove = new uint256[](2);
@@ -411,16 +412,16 @@ contract PDPVerifierProofSetMutateTest is Test {
         toRemove[1] = 1; // future root
         vm.expectRevert("Can only schedule removal of existing roots");
         pdpVerifier.scheduleRemovals(setId, toRemove);
-        recordAssert.expectRecord(PDPListener.OperationType.REMOVE_SCHEDULED, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.REMOVE_SCHEDULED, setId);
         // Actual removal does not fail
         pdpVerifier.nextProvingPeriod(setId);
-        recordAssert.expectRecord(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
 
         // Scheduling both unchallengeable and challengeable roots for removal succeeds
         // scheduling duplicate ids in both cases succeeds
         uint256[] memory toRemove2 = new uint256[](4);
         pdpVerifier.addRoots(setId, roots);
-        recordAssert.expectRecord(PDPListener.OperationType.ADD, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.ADD, setId);
         toRemove2[0] = 0; // current challengeable root
         toRemove2[1] = 1; // current unchallengeable root
         toRemove2[2] = 0; // duplicate challengeable
@@ -432,9 +433,9 @@ contract PDPVerifierProofSetMutateTest is Test {
         assertEq(true, pdpVerifier.rootChallengable(setId, 0));
         assertEq(false, pdpVerifier.rootChallengable(setId, 1));
         pdpVerifier.scheduleRemovals(setId, toRemove2);
-        recordAssert.expectRecord(PDPListener.OperationType.REMOVE_SCHEDULED, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.REMOVE_SCHEDULED, setId);
         pdpVerifier.nextProvingPeriod(setId);
-        recordAssert.expectRecord(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
 
         assertEq(false, pdpVerifier.rootLive(setId, 0));
         assertEq(false, pdpVerifier.rootLive(setId, 1));
@@ -488,8 +489,8 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
     uint256 constant challengeFinalityDelay = 2;
     string constant cidPrefix = "CID";
     PDPVerifier pdpVerifier;
-    SimplePDPService pdpVerifier;
-    SimplePDPServiceHelper recordAssert;
+    SimplePDPService listener;
+    ListenerHelper listenerAssert;
 
     function setUp() public {
         PDPVerifier pdpVerifierImpl = new PDPVerifier();
@@ -499,15 +500,15 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         );
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
-        SimplePDPService recordKeeperImpl = new SimplePDPService();
+        SimplePDPService listenerImpl = new SimplePDPService();
         initializeData = abi.encodeWithSelector(SimplePDPService.initialize.selector, address(pdpVerifier));
-        MyERC1967Proxy recordKeeperProxy = new MyERC1967Proxy(address(recordKeeperImpl), initializeData);
-        recordKeeper = SimplePDPService(address(recordKeeperProxy));
-        recordAssert = new RecordKeeperHelper(address(recordKeeper));
+        MyERC1967Proxy listenerProxy = new MyERC1967Proxy(address(listenerImpl), initializeData);
+        listener = SimplePDPService(address(listenerProxy));
+        listenerAssert = new ListenerHelper(address(listener));
     }
 
     function tearDown() public view {
-        recordAssert.assertAllRecords();
+        listenerAssert.assertAllEvents();
     }
 
     function testProveSingleRoot() public {
@@ -526,13 +527,13 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         pdpVerifier.provePossession(setId, proofs);
 
         // Verify the next challenge is in a subsequent epoch.
-        recordAssert.expectRecord(PDPListener.OperationType.PROVE_POSSESSION, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.PROVE_POSSESSION, setId);
         // Next challenge unchanged by prove
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), challengeEpoch);
 
         // Verify the next challenge is in a subsequent epoch after nextProvingPeriod
         pdpVerifier.nextProvingPeriod(setId);
-        recordAssert.expectRecord(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
 
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
         tearDown();
@@ -551,7 +552,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
 
         // Submit proof.
         pdpVerifier.provePossession(setId, proofs);
-        recordAssert.expectRecord(PDPListener.OperationType.PROVE_POSSESSION, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.PROVE_POSSESSION, setId);
         tearDown();
     }
 
@@ -573,8 +574,8 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
     }
 
     function testEmptyProofRejected() public {
-        uint256 setId = pdpVerifier.createProofSet(address(pdpVerifier));
-        recordAssert.expectRecord(PDPListener.OperationType.CREATE, setId);
+        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        listenerAssert.expectEvent(PDPListener.OperationType.CREATE, setId);
         PDPVerifier.Proof[] memory emptyProof = new PDPVerifier.Proof[](0);
 
         // Rejected with no roots
@@ -600,9 +601,9 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
 
         // Submit proof successfully, advancing the proof set to a new challenge epoch.
         pdpVerifier.provePossession(setId, proofs);
-        recordAssert.expectRecord(PDPListener.OperationType.PROVE_POSSESSION, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.PROVE_POSSESSION, setId);
         pdpVerifier.nextProvingPeriod(setId); // resample
-        recordAssert.expectRecord(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
 
         uint nextChallengeEpoch = pdpVerifier.getNextChallengeEpoch(setId);
         assertNotEq(nextChallengeEpoch, challengeEpoch);
@@ -644,10 +645,10 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         uint256[] memory removeRoots = new uint256[](1);
         removeRoots[0] = newRootId;
         pdpVerifier.scheduleRemovals(setId, removeRoots);
-        recordAssert.expectRecord(PDPListener.OperationType.REMOVE_SCHEDULED, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.REMOVE_SCHEDULED, setId);
         // flush removes
         pdpVerifier.nextProvingPeriod(setId);
-        recordAssert.expectRecord(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
 
         // Make a new proof that is valid with two roots
         vm.roll(pdpVerifier.getNextChallengeEpoch(setId));
@@ -661,7 +662,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         // But the single root proof is now good again.
         proofsOneRoot = buildProofsForSingleton(setId, 1, trees[0], leafCounts[0]); // regen as removal forced resampling challenge seed
         pdpVerifier.provePossession(setId, proofsOneRoot);
-        recordAssert.expectRecord(PDPListener.OperationType.PROVE_POSSESSION, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.PROVE_POSSESSION, setId);
         tearDown();
     }
 
@@ -683,7 +684,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         PDPVerifier.Proof[] memory proofs = buildProofs(pdpVerifier, setId, challengeCount, trees, leafCounts);
         // Submit proof.
         pdpVerifier.provePossession(setId, proofs);
-        recordAssert.expectRecord(PDPListener.OperationType.PROVE_POSSESSION, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.PROVE_POSSESSION, setId);
         tearDown();
     }
 
@@ -702,12 +703,12 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         }
 
         // Create new proof set and add roots.
-        uint256 setId = pdpVerifier.createProofSet(address(pdpVerifier));
-        recordAssert.expectRecord(PDPListener.OperationType.CREATE, setId);
+        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        listenerAssert.expectEvent(PDPListener.OperationType.CREATE, setId);
         pdpVerifier.addRoots(setId, roots);
-        recordAssert.expectRecord(PDPListener.OperationType.ADD, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.ADD, setId);
         pdpVerifier.nextProvingPeriod(setId); // flush adds
-        recordAssert.expectRecord(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
         return (setId, trees);
     }
 
@@ -726,9 +727,9 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
         roots[0] = makeRoot(tree, leafCount);
         uint256 rootId = pdpVerifier.addRoots(setId, roots);
-        recordAssert.expectRecord(PDPListener.OperationType.ADD, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.ADD, setId);
         pdpVerifier.nextProvingPeriod(setId); // flush adds
-        recordAssert.expectRecord(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
+        listenerAssert.expectEvent(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
         return (tree, rootId);
     }
 
@@ -795,7 +796,7 @@ import "../src/PDPVerifier.sol";
 
 contract SumTreeAddTest is Test {
     SumTreeInternalTestPDPVerifier pdpVerifier;
-    SimplePDPService pdpVerifier;
+    SimplePDPService listener;
     uint256 testSetId;
 
     function setUp() public {
@@ -806,10 +807,10 @@ contract SumTreeAddTest is Test {
         );
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = SumTreeInternalTestPDPVerifier(address(proxy));
-        SimplePDPService recordKeeperImpl = new SimplePDPService();
+        SimplePDPService listenerImpl = new SimplePDPService();
         initializeData = abi.encodeWithSelector(SimplePDPService.initialize.selector, address(pdpVerifier));
-        MyERC1967Proxy recordKeeperProxy = new MyERC1967Proxy(address(recordKeeperImpl), initializeData);
-        recordKeeper = SimplePDPService(address(recordKeeperProxy));        testSetId = pdpVerifier.createProofSet(address(recordKeeper));
+        MyERC1967Proxy listenerProxy = new MyERC1967Proxy(address(listenerImpl), initializeData);
+        listener = SimplePDPService(address(listenerProxy));        testSetId = pdpVerifier.createProofSet(address(listener));
     }
 
     function testMultiAdd() public {
@@ -1023,17 +1024,17 @@ contract SumTreeAddTest is Test {
     }
 }
 
-contract SimplePDPServiceHelper is Test {
-    address simplePDPVerifier;
+contract ListenerHelper is Test {
+    address pdpVerifier;
     mapping(uint256 => bool) public seenSetIds;
     uint256[] public setIds;
     mapping(uint256 => PDPListener.OperationType[]) public expectedRecords;
 
-    constructor(address _simplePDPVerifier) {
-        simplePDPVerifier = _simplePDPVerifier;
+    constructor(address _pdpVerifier) {
+        pdpVerifier = _pdpVerifier;
     }
 
-    function expectRecord(PDPListener.OperationType operationType, uint256 setId) public {
+    function expectEvent(PDPListener.OperationType operationType, uint256 setId) public {
         if (!seenSetIds[setId]) {
             setIds.push(setId);
             seenSetIds[setId] = true;
@@ -1042,14 +1043,14 @@ contract SimplePDPServiceHelper is Test {
         expectedRecords[setId].push(operationType);
     }
 
-    function assertAllRecords() public view {
+    function assertAllEvents() public view {
         for (uint256 i = 0; i < setIds.length; i++) {
-            assertProofSetRecords(setIds[i]);
+            assertProofSetEvents(setIds[i]);
         }
     }
 
-    function assertProofSetRecords(uint256 setId) public view {
-        SimplePDPService.EventRecord[] memory records = SimplePDPService(simplePDPVerifier).listEvents(setId);
+    function assertProofSetEvents(uint256 setId) public view {
+        SimplePDPService.EventRecord[] memory records = SimplePDPService(pdpVerifier).listEvents(setId);
         assertEq(expectedRecords[setId].length, records.length, "Incorrect number of records");
         for (uint256 i = 0; i < records.length; i++) {
             assertEq(uint(records[i].operationType), uint(expectedRecords[setId][i]), "Incorrect operation type");
@@ -1058,7 +1059,7 @@ contract SimplePDPServiceHelper is Test {
     }
 
     // Assert the data format for each operation type
-    // This will need to be updated for all changes to the data format externalized to the record keeper
+    // This will need to be updated for all changes to the data format externalized to the listener
     function assertRecordDataFormat(PDPListener.OperationType operationType, bytes memory extraData) internal pure {
         if (operationType == PDPListener.OperationType.CREATE) {
             abi.decode(extraData, (address));
@@ -1079,7 +1080,7 @@ contract SimplePDPServiceHelper is Test {
     }
 }
 
-contract BadSimplePDPService is PDPListener {
+contract BadListener is PDPListener {
     PDPListener.OperationType public badOperation;
 
     function setBadOperation(PDPListener.OperationType operationType) external {
@@ -1098,9 +1099,9 @@ contract BadSimplePDPService is PDPListener {
     }
 }
 
-contract SimplePDPServiceIntegrationTest is Test {
+contract PDPListenerIntegrationTest is Test {
     PDPVerifier pdpVerifier;
-    BadSimplePDPService badSimplePDPService;
+    BadListener badListener;
 
     function setUp() public {
         PDPVerifier pdpVerifierImpl = new PDPVerifier();
@@ -1110,35 +1111,35 @@ contract SimplePDPServiceIntegrationTest is Test {
         );
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
-        badRecordKeeper = new BadRecordKeeper();
+        badListener = new BadListener();
     }
 
-    function testRecordKeeperPropagatesErrors() public {
+    function testListenerPropagatesErrors() public {
 
-        // Can't create a proof set with a bad record keeper
-        badRecordKeeper.setBadOperation(PDPListener.OperationType.CREATE);
+        // Can't create a proof set with a bad listener
+        badListener.setBadOperation(PDPListener.OperationType.CREATE);
         vm.expectRevert("Failing operation");
-        pdpVerifier.createProofSet(address(badRecordKeeper));
+        pdpVerifier.createProofSet(address(badListener));
 
-        badRecordKeeper.setBadOperation(PDPListener.OperationType.NONE);
-        pdpVerifier.createProofSet(address(badRecordKeeper));
+        badListener.setBadOperation(PDPListener.OperationType.NONE);
+        pdpVerifier.createProofSet(address(badListener));
 
-        badRecordKeeper.setBadOperation(PDPListener.OperationType.ADD);
+        badListener.setBadOperation(PDPListener.OperationType.ADD);
         PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
         roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 32);
         vm.expectRevert("Failing operation");
         pdpVerifier.addRoots(0, roots);
 
-        badRecordKeeper.setBadOperation(PDPListener.OperationType.NONE);
+        badListener.setBadOperation(PDPListener.OperationType.NONE);
         pdpVerifier.addRoots(0, roots);
 
-        badRecordKeeper.setBadOperation(PDPListener.OperationType.REMOVE_SCHEDULED);
+        badListener.setBadOperation(PDPListener.OperationType.REMOVE_SCHEDULED);
         uint256[] memory rootIds = new uint256[](1);
         rootIds[0] = 0;
         vm.expectRevert("Failing operation");
         pdpVerifier.scheduleRemovals(0, rootIds);
 
-        badRecordKeeper.setBadOperation(PDPListener.OperationType.NEXT_PROVING_PERIOD);
+        badListener.setBadOperation(PDPListener.OperationType.NEXT_PROVING_PERIOD);
         vm.expectRevert("Failing operation");
         pdpVerifier.nextProvingPeriod(0);
     }
@@ -1146,7 +1147,7 @@ contract SimplePDPServiceIntegrationTest is Test {
 
 contract PDPVerifierE2ETest is Test, ProofBuilderHelper {
     PDPVerifier pdpVerifier;
-    SimplePDPService recordKeeper;
+    SimplePDPService listener;
     uint256 constant challengeFinalityDelay = 2;
 
     function setUp() public {
@@ -1157,15 +1158,15 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper {
         );
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
-        SimplePDPService recordKeeperImpl = new SimplePDPService();
+        SimplePDPService listenerImpl = new SimplePDPService();
         initializeData = abi.encodeWithSelector(SimplePDPService.initialize.selector, address(pdpVerifier));
-        MyERC1967Proxy recordKeeperProxy = new MyERC1967Proxy(address(recordKeeperImpl), initializeData);
-        recordKeeper = SimplePDPService(address(recordKeeperProxy));
+        MyERC1967Proxy listenerProxy = new MyERC1967Proxy(address(listenerImpl), initializeData);
+        listener = SimplePDPService(address(listenerProxy));
     }
 
     function testCompleteProvingPeriodE2E() public {
         // Step 1: Create a proof set
-        uint256 setId = pdpVerifier.createProofSet(address(recordKeeper));
+        uint256 setId = pdpVerifier.createProofSet(address(listener));
 
         // Step 2: Add data `A` in scope for the first proving period 
         // Note that the data in the first addRoots call is added to the first proving period

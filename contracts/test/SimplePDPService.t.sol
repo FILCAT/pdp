@@ -20,7 +20,7 @@ contract SimplePDPServiceTest is Test {
     }
 
     function testInitialState() public view {
-        assertEq(pdpService.pdpServiceAddress(), pdpServiceAddress, "PDP service address should be set correctly");
+        assertEq(pdpService.pdpServiceAddress(), pdpServiceAddress, "PDP verifier address should be set correctly");
     }
 
     function testAddRecord() public {
@@ -70,7 +70,7 @@ contract SimplePDPServiceTest is Test {
         bytes memory extraData = abi.encode("test data");
 
         vm.prank(address(0xdead));
-        vm.expectRevert("Caller is not the PDP service");
+        vm.expectRevert("Caller is not the PDP verifier");
         pdpService.receiveProofSetEvent(proofSetId, epoch, operationType, extraData);
     }
 

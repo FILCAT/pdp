@@ -40,7 +40,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event RootsAdded(uint256 indexed firstAdded);
     event RootsRemoved(uint256 indexed totalDelta);
 
-
     // Types
    
     // State fields
