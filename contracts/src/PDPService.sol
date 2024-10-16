@@ -8,6 +8,7 @@ import {PDPRecordKeeper} from "../src/PDPRecordKeeper.sol";
 
 contract PDPService {
     // Constants
+    address public constant BURN_ACTOR = 0xff00000000000000000000000000000000000063;
     uint256 public constant LEAF_SIZE = 32;
     uint256 public constant MAX_ROOT_SIZE = 1 << 50;
 
@@ -65,6 +66,12 @@ contract PDPService {
     // Methods
     constructor(uint256 _challengeFinality) {
         challengeFinality = _challengeFinality;
+    }
+
+    function burnFee(uint256 amount) public payable {
+        require(msg.value >= amount, "Incorrect fee amount");
+        (bool success, ) = BURN_ACTOR.call{value: amount}("");
+        require(success, "Burn failed");
     }
 
     // Returns the current challenge finality value
