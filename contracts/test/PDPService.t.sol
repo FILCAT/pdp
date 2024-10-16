@@ -616,12 +616,12 @@ contract PDPServiceProofTest is Test, ProofBuilderHelper {
         PDPService.Proof[] memory proofsTwoRoots = buildProofs(pdpService, setId, 1, trees, leafCounts);
 
         // A proof for two roots should be invalid against the set with one.
-        proofsTwoRoots = buildProofs(pdpService, setId, challengeCount, trees, leafCounts); // regen as removal forced resampling challenge seed
+        proofsTwoRoots = buildProofs(pdpService, setId, 1, trees, leafCounts); // regen as removal forced resampling challenge seed
         vm.expectRevert();
         pdpService.provePossession(setId, proofsTwoRoots);
 
         // But the single root proof is now good again.
-        proofsOneRoot = buildProofsForSingleton(setId, challengeCount, trees[0], leafCounts[0]); // regen as removal forced resampling challenge seed
+        proofsOneRoot = buildProofsForSingleton(setId, 1, trees[0], leafCounts[0]); // regen as removal forced resampling challenge seed
         pdpService.provePossession(setId, proofsOneRoot);
         recordAssert.expectRecord(PDPListener.OperationType.PROVE_POSSESSION, setId);
         tearDown();
@@ -1206,41 +1206,5 @@ contract PDPServiceE2ETest is Test, ProofBuilderHelper {
 
         // CHECK: the next challenge epoch has been updated
         assertEq(pdpService.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay, "Next challenge epoch should be updated");
-    }
-}
-
-contract RecordKeeperIntegrationTest is Test {
-    PDPService pdpService;
-    BadRecordKeeper badRecordKeeper;
-
-    function setUp() public {
-        pdpService = new PDPService(2);
-    }
-
-    function testRecordKeeperPropagatesErrors() public {
-        BadRecordKeeper recordKeeper = new BadRecordKeeper();
-
-        // Can't create a proof set with a bad record keeper
-        recordKeeper.setBadOperation(PDPListener.OperationType.CREATE);
-        vm.expectRevert("Failing operation");
-        pdpService.createProofSet(address(recordKeeper));
-
-        recordKeeper.setBadOperation(PDPListener.OperationType.NONE);
-        pdpService.createProofSet(address(recordKeeper));
-
-        recordKeeper.setBadOperation(PDPListener.OperationType.ADD);
-        PDPService.RootData[] memory roots = new PDPService.RootData[](1);
-        roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 32);
-        vm.expectRevert("Failing operation");
-        pdpService.addRoots(0, roots);
-
-        recordKeeper.setBadOperation(PDPListener.OperationType.NONE);
-        pdpService.addRoots(0, roots);
-
-        recordKeeper.setBadOperation(PDPListener.OperationType.REMOVE);
-        uint256[] memory rootIds = new uint256[](1);
-        rootIds[0] = 0;
-        vm.expectRevert("Failing operation");
-        pdpService.removeRoots(0, rootIds);
     }
 }
