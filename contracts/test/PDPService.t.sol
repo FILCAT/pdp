@@ -374,17 +374,18 @@ contract PDPServiceProofSetMutateTest is Test {
         roots[0] = PDPService.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         pdpService.addRoots(setId, roots);
         recordAssert.expectRecord(PDPListener.OperationType.ADD, setId);
-        assertEq(true, pdpService.rootChallengable(setId, 0));
+        assertEq(true, pdpService.rootLive(setId, 0));
+        assertEq(false, pdpService.rootLive(setId, 1));
         uint256[] memory toRemove = new uint256[](2);
 
         // Scheduling an un-added root for removal should fail
-        toRemove[0] = 0; // current (unchallengeable) root
+        toRemove[0] = 0; // current root
         toRemove[1] = 1; // future root
         vm.expectRevert("Can only schedule removal of existing roots");
         pdpService.scheduleRemovals(setId, toRemove);
         recordAssert.expectRecord(PDPListener.OperationType.REMOVE_SCHEDULED, setId);
         // Actual removal does not fail
-        pdpService.nextProvingPeriod(setId); // root 0 is now challengable
+        pdpService.nextProvingPeriod(setId);
         recordAssert.expectRecord(PDPListener.OperationType.NEXT_PROVING_PERIOD, setId);
 
         // Scheduling both unchallengeable and challengeable roots for removal succeeds
