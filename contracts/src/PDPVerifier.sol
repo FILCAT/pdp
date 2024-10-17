@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import {BitOps} from "./BitOps.sol";
 import {Cids} from "./Cids.sol";
 import {MerkleVerify} from "./Proofs.sol";
-import {ProofFees} from "./Fees.sol";
+import {PDPFees} from "./Fees.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -120,7 +120,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    function burnFee(uint256 amount) internal payable {
+    function burnFee(uint256 amount) internal {
         require(msg.value >= amount, "Incorrect fee amount");
         (bool success, ) = BURN_ACTOR.call{value: amount}("");
         require(success, "Burn failed");
@@ -231,7 +231,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // for referring to the proof set later.
     // Sender of create message is proof set owner.
     function createProofSet(address listenerAddr) public payable returns (uint256) {
-        uint256 sybilFee = Fees.sybilFee();
+        uint256 sybilFee = PDPFees.sybilFee();
         require(msg.value >= sybilFee, "sybil fee not met");
         burnFee(sybilFee);
         if (msg.value > sybilFee) {
@@ -359,7 +359,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(proofs.length > 0, "empty proof");
 
         // Calculate and burn the proof fee
-        uint256 proofFee = ProofFees.proofFee(proofs.length);
+        uint256 proofFee = PDPFees.proofFee(proofs.length);
         burnFee(proofFee);
         if (msg.value > proofFee) {
             // Return the overpayment
