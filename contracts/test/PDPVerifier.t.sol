@@ -9,7 +9,6 @@ import {ProofUtil} from "./ProofUtil.sol";
 import {PDPFees} from "../src/Fees.sol";
 import {SimplePDPService} from "../src/SimplePDPService.sol";
 
-
 contract PDPVerifierProofSetCreateDeleteTest is Test {
     SimplePDPService listener;
     ListenerHelper listenerAssert;
@@ -34,7 +33,7 @@ contract PDPVerifierProofSetCreateDeleteTest is Test {
         listenerAssert.assertAllEvents();
     }
 
-    function testcreateProofSet() public {
+    function testCreateProofSet() public {
         Cids.Cid memory zeroRoot;
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
         listenerAssert.expectEvent(SimplePDPService.OperationType.CREATE, setId);
@@ -525,7 +524,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         PDPVerifier.Proof[] memory proofs = buildProofsForSingleton(setId, challengeCount, tree, leafCount);
 
         // Submit proof.
-        pdpVerifier.provePossession(setId, proofs);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(proofs.length)}(setId, proofs);
 
         // Verify the next challenge is in a subsequent epoch.
         listenerAssert.expectEvent(SimplePDPService.OperationType.PROVE_POSSESSION, setId);
@@ -552,7 +551,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         PDPVerifier.Proof[] memory proofs = buildProofsForSingleton(setId, 3, tree, leafCount);
 
         // Submit proof.
-        pdpVerifier.provePossession(setId, proofs);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(proofs.length)}(setId, proofs);
         listenerAssert.expectEvent(SimplePDPService.OperationType.PROVE_POSSESSION, setId);
         tearDown();
     }
@@ -570,7 +569,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
 
         // Submit proof.
         vm.expectRevert();
-        pdpVerifier.provePossession(setId, proofs);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(proofs.length)}(setId, proofs);
         tearDown();
     }
 
@@ -581,13 +580,13 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
 
         // Rejected with no roots
         vm.expectRevert();
-        pdpVerifier.provePossession(setId, emptyProof);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(0)}(setId, emptyProof);
 
         addOneRoot(setId, 10);
 
         // Rejected with a root
         vm.expectRevert();
-        pdpVerifier.provePossession(setId, emptyProof);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(0)}(setId, emptyProof);
         tearDown();
     }
 
@@ -601,7 +600,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         PDPVerifier.Proof[] memory proofs = buildProofsForSingleton(setId, 3, tree, leafCount);
 
         // Submit proof successfully, advancing the proof set to a new challenge epoch.
-        pdpVerifier.provePossession(setId, proofs);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(proofs.length)}(setId, proofs);
         listenerAssert.expectEvent(SimplePDPService.OperationType.PROVE_POSSESSION, setId);
         pdpVerifier.nextProvingPeriod(setId); // resample
         listenerAssert.expectEvent(SimplePDPService.OperationType.NEXT_PROVING_PERIOD, setId);
@@ -612,7 +611,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
 
         // The proof for the old challenge epoch should no longer be valid.
         vm.expectRevert();
-        pdpVerifier.provePossession(setId, proofs);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(proofs.length)}(setId, proofs);
         tearDown();
     }
 
@@ -640,7 +639,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
 
         // The proof for one root should be invalid against the set with two.
         vm.expectRevert();
-        pdpVerifier.provePossession(setId, proofsOneRoot);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(proofsOneRoot.length)}(setId, proofsOneRoot);
 
         // Remove a root and resample
         uint256[] memory removeRoots = new uint256[](1);
@@ -658,11 +657,11 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         // A proof for two roots should be invalid against the set with one.
         proofsTwoRoots = buildProofs(pdpVerifier, setId, 1, trees, leafCounts); // regen as removal forced resampling challenge seed
         vm.expectRevert();
-        pdpVerifier.provePossession(setId, proofsTwoRoots);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(proofsTwoRoots.length)}(setId, proofsTwoRoots);
 
         // But the single root proof is now good again.
         proofsOneRoot = buildProofsForSingleton(setId, 1, trees[0], leafCounts[0]); // regen as removal forced resampling challenge seed
-        pdpVerifier.provePossession(setId, proofsOneRoot);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(proofsOneRoot.length)}(setId, proofsOneRoot);
         listenerAssert.expectEvent(SimplePDPService.OperationType.PROVE_POSSESSION, setId);
         tearDown();
     }
@@ -684,7 +683,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         uint challengeCount = 11;
         PDPVerifier.Proof[] memory proofs = buildProofs(pdpVerifier, setId, challengeCount, trees, leafCounts);
         // Submit proof.
-        pdpVerifier.provePossession(setId, proofs);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(proofs.length)}(setId, proofs);
         listenerAssert.expectEvent(SimplePDPService.OperationType.PROVE_POSSESSION, setId);
         tearDown();
     }
@@ -1252,7 +1251,7 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper {
         // Proving trees for PP1 are just treesA
         PDPVerifier.Proof[] memory proofsPP1 = buildProofs(pdpVerifier, setId, challengeCount, treesA, leafCountsA);
 
-        pdpVerifier.provePossession(setId, proofsPP1);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(proofsPP1.length)}(setId, proofsPP1);
         pdpVerifier.nextProvingPeriod(setId);
         // CHECK: leaf counts
         assertEq(pdpVerifier.getRootLeafCount(setId, 0), leafCountsA[0], "First root leaf count should be the set leaf count");
