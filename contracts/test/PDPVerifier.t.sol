@@ -117,6 +117,32 @@ contract PDPVerifierProofSetCreateDeleteTest is Test {
         assertEq(2, pdpVerifier.getNextProofSetId(), "Next proof set ID should be 2");
         tearDown();
     }
+
+    receive() external payable {}
+
+    function testCreateProofSetFeeHandling() public {
+        uint256 sybilFee = PDPFees.sybilFee();
+        
+        // Test 1: Fails when sending not enough for sybil fee
+        vm.expectRevert("sybil fee not met");
+        pdpVerifier.createProofSet{value: sybilFee - 1}(address(listener));
+
+        // Test 2: Returns funds over the sybil fee back to the sender
+        uint256 excessAmount = 1 ether;
+        uint256 initialBalance = address(this).balance;
+        
+        uint256 setId = pdpVerifier.createProofSet{value: sybilFee + excessAmount}(address(listener));
+        
+        uint256 finalBalance = address(this).balance;
+        uint256 refundedAmount = finalBalance - (initialBalance - sybilFee - excessAmount);
+        assertEq(refundedAmount, excessAmount, "Excess amount should be refunded");
+
+        // Additional checks to ensure the proof set was created correctly
+        assertEq(pdpVerifier.getProofSetLeafCount(setId), 0, "Proof set leaf count should be 0");
+        (address owner, address proposedOwner) = pdpVerifier.getProofSetOwner(setId);
+        assertEq(owner, address(this), "Proof set owner should be the constructor sender");
+        assertEq(proposedOwner, address(0), "Proof set proposed owner should be initialized to zero address");
+    }
 }
 
 contract PDPVerifierOwnershipTest is Test {
@@ -536,6 +562,45 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         listenerAssert.expectEvent(SimplePDPService.OperationType.NEXT_PROVING_PERIOD, setId);
 
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
+        tearDown();
+    }
+
+    receive() external payable {}
+
+    function testProveWithDifferentFeeAmounts() public {
+        uint leafCount = 10;
+        (uint256 setId, bytes32[][] memory tree) = makeProofSetWithOneRoot(leafCount);
+
+        // Advance chain until challenge epoch.
+        uint256 challengeEpoch = pdpVerifier.getNextChallengeEpoch(setId);
+        vm.roll(challengeEpoch);
+
+        // Build a proof with multiple challenges to single tree.
+        uint challengeCount = 3;
+        PDPVerifier.Proof[] memory proofs = buildProofsForSingleton(setId, challengeCount, tree, leafCount);
+
+        // Calculate the correct proof fee
+        uint256 correctProofFee = PDPFees.proofFee(challengeCount);
+
+        // Test 1: Sending less than the required fee
+        uint256 insufficientFee = correctProofFee - 1;
+        vm.expectRevert("Incorrect fee amount");
+        pdpVerifier.provePossession{value: insufficientFee}(setId, proofs);
+
+        // Test 2: Sending more than the required fee
+        uint256 excessFee = correctProofFee + 1 ether;
+        uint256 initialBalance = address(this).balance;
+        
+        pdpVerifier.provePossession{value: excessFee}(setId, proofs);
+        
+        uint256 finalBalance = address(this).balance;
+        uint256 actualFeeSpent = initialBalance - finalBalance;
+        assertEq(actualFeeSpent, correctProofFee, "Only the correct fee should be spent");
+
+        // Verify that the proof was accepted
+        listenerAssert.expectEvent(PDPListener.OperationType.PROVE_POSSESSION, setId);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), challengeEpoch, "Next challenge epoch should remain unchanged after prove");
+
         tearDown();
     }
 
