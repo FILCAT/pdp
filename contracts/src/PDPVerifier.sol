@@ -28,7 +28,7 @@ interface PDPListener {
     ) external;
 }
 
-contract PDPService is Initializable, UUPSUpgradeable, OwnableUpgradeable {
+contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Constants
     address public constant BURN_ACTOR = 0xff00000000000000000000000000000000000063;
     uint256 public constant LEAF_SIZE = 32;
@@ -39,7 +39,6 @@ contract PDPService is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event ProofSetCreated(uint256 indexed setId);
     event RootsAdded(uint256 indexed firstAdded);
     event RootsRemoved(uint256 indexed totalDelta);
-
 
     // Types
    
@@ -66,7 +65,7 @@ contract PDPService is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         challengeRange: uint256
         enqueuedRemovals: uint256[]
     }
-    ** PDP service contract tracks many possible proof sets **
+    ** PDP Verifier contract tracks many possible proof sets **
     []ProofSet proofsets
 
     To implement this logical structure in the solidity data model we have
@@ -549,7 +548,7 @@ contract PDPService is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // notify the listener contract about proof set events 
     function _notifyListener(uint256 proofSetId, address listenerAddr, PDPListener.OperationType operationType, bytes memory extraData) internal {
-        require(address(listenerAddr) != address(0), "Record keeper must be set");
+        require(address(listenerAddr) != address(0), "A PDP service contract that keeps the proving records must be set");
         PDPListener(listenerAddr).receiveProofSetEvent(proofSetId, uint64(block.number), operationType, extraData);
     }
 

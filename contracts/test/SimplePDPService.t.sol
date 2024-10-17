@@ -2,25 +2,25 @@
 pragma solidity ^0.8.13;
 
 import {Test, console} from "forge-std/Test.sol";
-import {PDPRecordKeeper} from "../src/PDPRecordKeeper.sol";
-import {PDPListener} from "../src/PDPService.sol";
+import {PDPListener} from "../src/PDPVerifier.sol";
+import {SimplePDPService} from "../src/SimplePDPService.sol";
 import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
 
 
-contract PDPRecordKeeperTest is Test {
-    PDPRecordKeeper public recordKeeper;
+contract SimplePDPServiceTest is Test {
+    SimplePDPService public pdpService;
     address public pdpServiceAddress;
 
     function setUp() public {
         pdpServiceAddress = address(this);
-        PDPRecordKeeper recordKeeperImpl = new PDPRecordKeeper();
-        bytes memory initializeData = abi.encodeWithSelector(PDPRecordKeeper.initialize.selector, address(pdpServiceAddress));
-        MyERC1967Proxy recordKeeperProxy = new MyERC1967Proxy(address(recordKeeperImpl), initializeData);
-        recordKeeper = PDPRecordKeeper(address(recordKeeperProxy));
+        SimplePDPService pdpServiceImpl = new SimplePDPService();
+        bytes memory initializeData = abi.encodeWithSelector(SimplePDPService.initialize.selector, address(pdpServiceAddress));
+        MyERC1967Proxy pdpServiceProxy = new MyERC1967Proxy(address(pdpServiceImpl), initializeData);
+        pdpService = SimplePDPService(address(pdpServiceProxy));
     }
 
     function testInitialState() public view {
-        assertEq(recordKeeper.pdpServiceAddress(), pdpServiceAddress, "PDP service address should be set correctly");
+        assertEq(pdpService.pdpServiceAddress(), pdpServiceAddress, "PDP verifier address should be set correctly");
     }
 
     function testAddRecord() public {
@@ -29,11 +29,11 @@ contract PDPRecordKeeperTest is Test {
         PDPListener.OperationType operationType = PDPListener.OperationType.CREATE;
         bytes memory extraData = abi.encode("test data");
 
-        recordKeeper.receiveProofSetEvent(proofSetId, epoch, operationType, extraData);
+        pdpService.receiveProofSetEvent(proofSetId, epoch, operationType, extraData);
 
-        assertEq(recordKeeper.getEventCount(proofSetId), 1, "Event count should be 1 after adding a record");
+        assertEq(pdpService.getEventCount(proofSetId), 1, "Event count should be 1 after adding a record");
 
-        PDPRecordKeeper.EventRecord memory eventRecord = recordKeeper.getEvent(proofSetId, 0);
+        SimplePDPService.EventRecord memory eventRecord = pdpService.getEvent(proofSetId, 0);
 
         assertEq(eventRecord.epoch, epoch, "Recorded epoch should match");
         assertEq(uint(eventRecord.operationType), uint(operationType), "Recorded operation type should match");
@@ -49,10 +49,10 @@ contract PDPRecordKeeperTest is Test {
         bytes memory extraData1 = abi.encode("test data 1");
         bytes memory extraData2 = abi.encode("test data 2");
 
-        recordKeeper.receiveProofSetEvent(proofSetId, epoch1, operationType1, extraData1);
-        recordKeeper.receiveProofSetEvent(proofSetId, epoch2, operationType2, extraData2);
+        pdpService.receiveProofSetEvent(proofSetId, epoch1, operationType1, extraData1);
+        pdpService.receiveProofSetEvent(proofSetId, epoch2, operationType2, extraData2);
 
-        PDPRecordKeeper.EventRecord[] memory events = recordKeeper.listEvents(proofSetId);
+        SimplePDPService.EventRecord[] memory events = pdpService.listEvents(proofSetId);
 
         assertEq(events.length, 2, "Should have 2 events");
         assertEq(events[0].epoch, epoch1, "First event epoch should match");
@@ -63,20 +63,20 @@ contract PDPRecordKeeperTest is Test {
         assertEq(events[1].extraData, extraData2, "Second event extra data should match");
     }
 
-    function testOnlyPDPServiceCanAddRecord() public {
+    function testOnlyPDPVerifierCanAddRecord() public {
         uint256 proofSetId = 1;
         uint64 epoch = 100;
         PDPListener.OperationType operationType = PDPListener.OperationType.CREATE;
         bytes memory extraData = abi.encode("test data");
 
         vm.prank(address(0xdead));
-        vm.expectRevert("Caller is not the PDP service");
-        recordKeeper.receiveProofSetEvent(proofSetId, epoch, operationType, extraData);
+        vm.expectRevert("Caller is not the PDP verifier");
+        pdpService.receiveProofSetEvent(proofSetId, epoch, operationType, extraData);
     }
 
     function testGetEventOutOfBounds() public {
         uint256 proofSetId = 1;
         vm.expectRevert("Event index out of bounds");
-        recordKeeper.getEvent(proofSetId, 0);
+        pdpService.getEvent(proofSetId, 0);
     }
 }
