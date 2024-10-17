@@ -21,8 +21,6 @@ library PDPFees {
     uint256 constant ONE_FIL = 10^18;
 
     uint256 constant SYBIL_FEE = 10^17;
-    address public constant BURN_ACTOR = 0xff00000000000000000000000000000000000063;
-
 
     // Currently unused
     //
