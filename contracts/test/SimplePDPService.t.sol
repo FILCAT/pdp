@@ -2,9 +2,10 @@
 pragma solidity ^0.8.13;
 
 import {Test, console} from "forge-std/Test.sol";
-import {PDPListener} from "../src/PDPVerifier.sol";
+import {PDPListener, PDPVerifier} from "../src/PDPVerifier.sol";
 import {SimplePDPService} from "../src/SimplePDPService.sol";
 import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
+import {Cids} from "../src/Cids.sol";
 
 
 contract SimplePDPServiceTest is Test {
@@ -24,54 +25,52 @@ contract SimplePDPServiceTest is Test {
     }
 
     function testAddRecord() public {
-        uint256 proofSetId = 1;
         uint64 epoch = 100;
-        PDPListener.OperationType operationType = PDPListener.OperationType.CREATE;
-        bytes memory extraData = abi.encode("test data");
+        uint256 proofSetId = 1;
 
-        pdpService.receiveProofSetEvent(proofSetId, epoch, operationType, extraData);
-
+        vm.roll(epoch);
+        pdpService.proofSetCreated(proofSetId, address(this));
         assertEq(pdpService.getEventCount(proofSetId), 1, "Event count should be 1 after adding a record");
 
         SimplePDPService.EventRecord memory eventRecord = pdpService.getEvent(proofSetId, 0);
 
         assertEq(eventRecord.epoch, epoch, "Recorded epoch should match");
-        assertEq(uint(eventRecord.operationType), uint(operationType), "Recorded operation type should match");
-        assertEq(eventRecord.extraData, extraData, "Recorded extra data should match");
+        assertEq(uint(eventRecord.operationType), uint(SimplePDPService.OperationType.CREATE), "Recorded operation type should match");
+        assertEq(eventRecord.extraData, abi.encode(address(this)), "Recorded extra data should match");
     }
 
     function testListEvents() public {
         uint256 proofSetId = 1;
         uint64 epoch1 = 100;
         uint64 epoch2 = 200;
-        PDPListener.OperationType operationType1 = PDPListener.OperationType.CREATE;
-        PDPListener.OperationType operationType2 = PDPListener.OperationType.ADD;
-        bytes memory extraData1 = abi.encode("test data 1");
-        bytes memory extraData2 = abi.encode("test data 2");
 
-        pdpService.receiveProofSetEvent(proofSetId, epoch1, operationType1, extraData1);
-        pdpService.receiveProofSetEvent(proofSetId, epoch2, operationType2, extraData2);
+        uint256 firstRoot = 42;
+        PDPVerifier.RootData[] memory rootData = new PDPVerifier.RootData[](1);
+        rootData[0] = PDPVerifier.RootData(Cids.Cid("test cid"), 100);
+
+        vm.roll(epoch1);
+        pdpService.proofSetCreated(proofSetId, address(this));
+        vm.roll(epoch2);
+        pdpService.rootsAdded(proofSetId, firstRoot, rootData);
 
         SimplePDPService.EventRecord[] memory events = pdpService.listEvents(proofSetId);
 
         assertEq(events.length, 2, "Should have 2 events");
         assertEq(events[0].epoch, epoch1, "First event epoch should match");
-        assertEq(uint(events[0].operationType), uint(operationType1), "First event operation type should match");
-        assertEq(events[0].extraData, extraData1, "First event extra data should match");
+        assertEq(uint(events[0].operationType), uint(SimplePDPService.OperationType.CREATE), "First event operation type should match");
+        assertEq(events[0].extraData, abi.encode(address(this)), "First event extra data should match");
+
         assertEq(events[1].epoch, epoch2, "Second event epoch should match");
-        assertEq(uint(events[1].operationType), uint(operationType2), "Second event operation type should match");
-        assertEq(events[1].extraData, extraData2, "Second event extra data should match");
+        assertEq(uint(events[1].operationType), uint(SimplePDPService.OperationType.ADD), "Second event operation type should match");
+        assertEq(events[1].extraData, abi.encode(firstRoot, rootData), "Second event extra data should match");
     }
 
     function testOnlyPDPVerifierCanAddRecord() public {
         uint256 proofSetId = 1;
-        uint64 epoch = 100;
-        PDPListener.OperationType operationType = PDPListener.OperationType.CREATE;
-        bytes memory extraData = abi.encode("test data");
 
         vm.prank(address(0xdead));
         vm.expectRevert("Caller is not the PDP verifier");
-        pdpService.receiveProofSetEvent(proofSetId, epoch, operationType, extraData);
+        pdpService.proofSetCreated(proofSetId, address(this));
     }
 
     function testGetEventOutOfBounds() public {
