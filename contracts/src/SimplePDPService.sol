@@ -7,14 +7,10 @@ import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgr
 import "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
 
-// SimplePDPServiceApplication is a default implementation of a PDP Application.
-// It maintains a record of all events that have occurred in the PDP service,
-// and provides a way to query these events.
-// This contract only supports one PDP service caller, set in the constructor.
-contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, OwnableUpgradeable {
-    // The address of the PDP service contract that is allowed to call this contract
-    address public pdpServiceAddress;
 
+// PDPRecordKeeper tracks PDP operations.  It is used as a base contract for PDPListeners
+// in order to give users the capability to consume events async.
+contract PDPRecordKeeper {
     enum OperationType {
         NONE,
         CREATE,
@@ -23,7 +19,7 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
         REMOVE_SCHEDULED,
         PROVE_POSSESSION,
         NEXT_PROVING_PERIOD
-    }
+    }    
 
     // Struct to store event details
     struct EventRecord {
@@ -33,11 +29,52 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
         bytes extraData;
     }
 
+    // Eth event emitted when a new record is added
+    event RecordAdded(uint256 indexed proofSetId, uint64 epoch, OperationType operationType);
+
     // Mapping to store events for each proof set
     mapping(uint256 => EventRecord[]) public proofSetEvents;
 
-    // Eth event emitted when a new record is added
-    event RecordAdded(uint256 indexed proofSetId, uint64 epoch, OperationType operationType);
+    function receiveProofSetEvent(uint256 proofSetId, OperationType operationType, bytes memory extraData ) internal {
+        uint64 epoch = uint64(block.number);
+        EventRecord memory newRecord = EventRecord({
+            epoch: epoch,
+            proofSetId: proofSetId,
+            operationType: operationType,
+            extraData: extraData
+        });
+        proofSetEvents[proofSetId].push(newRecord);
+        emit RecordAdded(proofSetId, epoch, operationType);
+    }
+
+    // Function to get the number of events for a proof set
+    function getEventCount(uint256 proofSetId) external view returns (uint256) {
+        return proofSetEvents[proofSetId].length;
+    }
+
+    // Function to get a specific event for a proof set
+    function getEvent(uint256 proofSetId, uint256 eventIndex)
+        external
+        view
+        returns (EventRecord memory)
+    {
+        require(eventIndex < proofSetEvents[proofSetId].length, "Event index out of bounds");
+        return proofSetEvents[proofSetId][eventIndex];
+    }
+
+    // Function to get all events for a proof set
+    function listEvents(uint256 proofSetId) external view returns (EventRecord[] memory) {
+        return proofSetEvents[proofSetId];
+    }
+}
+
+// SimplePDPServiceApplication is a default implementation of a PDP Application.
+// It maintains a record of all events that have occurred in the PDP service,
+// and provides a way to query these events.
+// This contract only supports one PDP service caller, set in the constructor.
+contract SimplePDPService is PDPListener, PDPRecordKeeper, Initializable, UUPSUpgradeable, OwnableUpgradeable {
+    // The address of the PDP service contract that is allowed to call this contract
+    address public pdpServiceAddress;
 
      /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -82,37 +119,5 @@ require(_pdpServiceAddress != address(0), "PDP service address cannot be zero");
 
     function nextProvingPeriod(uint256 proofSetId, uint256 leafCount) external onlyPDPVerifier {
         receiveProofSetEvent(proofSetId, OperationType.NEXT_PROVING_PERIOD, abi.encode(leafCount));
-    }
-
-    function receiveProofSetEvent(uint256 proofSetId, OperationType operationType, bytes memory extraData ) internal {
-        uint64 epoch = uint64(block.number);
-        EventRecord memory newRecord = EventRecord({
-            epoch: epoch,
-            proofSetId: proofSetId,
-            operationType: operationType,
-            extraData: extraData
-        });
-        proofSetEvents[proofSetId].push(newRecord);
-        emit RecordAdded(proofSetId, epoch, operationType);
-    }
-
-    // Function to get the number of events for a proof set
-    function getEventCount(uint256 proofSetId) external view returns (uint256) {
-        return proofSetEvents[proofSetId].length;
-    }
-
-    // Function to get a specific event for a proof set
-    function getEvent(uint256 proofSetId, uint256 eventIndex)
-        external
-        view
-        returns (EventRecord memory)
-    {
-        require(eventIndex < proofSetEvents[proofSetId].length, "Event index out of bounds");
-        return proofSetEvents[proofSetId][eventIndex];
-    }
-
-    // Function to get all events for a proof set
-    function listEvents(uint256 proofSetId) external view returns (EventRecord[] memory) {
-        return proofSetEvents[proofSetId];
     }
 }
