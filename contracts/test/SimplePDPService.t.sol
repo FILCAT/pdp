@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import {Test, console} from "forge-std/Test.sol";
 import {PDPListener, PDPVerifier} from "../src/PDPVerifier.sol";
-import {SimplePDPService} from "../src/SimplePDPService.sol";
+import {SimplePDPService, PDPRecordKeeper} from "../src/SimplePDPService.sol";
 import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
 import {Cids} from "../src/Cids.sol";
 
@@ -35,7 +35,7 @@ contract SimplePDPServiceTest is Test {
         SimplePDPService.EventRecord memory eventRecord = pdpService.getEvent(proofSetId, 0);
 
         assertEq(eventRecord.epoch, epoch, "Recorded epoch should match");
-        assertEq(uint(eventRecord.operationType), uint(SimplePDPService.OperationType.CREATE), "Recorded operation type should match");
+        assertEq(uint(eventRecord.operationType), uint(PDPRecordKeeper.OperationType.CREATE), "Recorded operation type should match");
         assertEq(eventRecord.extraData, abi.encode(address(this)), "Recorded extra data should match");
     }
 
@@ -57,11 +57,11 @@ contract SimplePDPServiceTest is Test {
 
         assertEq(events.length, 2, "Should have 2 events");
         assertEq(events[0].epoch, epoch1, "First event epoch should match");
-        assertEq(uint(events[0].operationType), uint(SimplePDPService.OperationType.CREATE), "First event operation type should match");
+        assertEq(uint(events[0].operationType), uint(PDPRecordKeeper.OperationType.CREATE), "First event operation type should match");
         assertEq(events[0].extraData, abi.encode(address(this)), "First event extra data should match");
 
         assertEq(events[1].epoch, epoch2, "Second event epoch should match");
-        assertEq(uint(events[1].operationType), uint(SimplePDPService.OperationType.ADD), "Second event operation type should match");
+        assertEq(uint(events[1].operationType), uint(PDPRecordKeeper.OperationType.ADD), "Second event operation type should match");
         assertEq(events[1].extraData, abi.encode(firstRoot, rootData), "Second event extra data should match");
     }
 
