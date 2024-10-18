@@ -598,7 +598,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         assertEq(actualFeeSpent, correctProofFee, "Only the correct fee should be spent");
 
         // Verify that the proof was accepted
-        listenerAssert.expectEvent(PDPListener.OperationType.PROVE_POSSESSION, setId);
+        listenerAssert.expectEvent(SimplePDPService.OperationType.PROVE_POSSESSION, setId);
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), challengeEpoch, "Next challenge epoch should remain unchanged after prove");
 
         tearDown();
