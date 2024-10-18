@@ -6,8 +6,8 @@ import {PDPVerifier, PDPListener} from "../src/PDPVerifier.sol";
 import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
 import {MerkleProve} from "../src/Proofs.sol";
 import {ProofUtil} from "./ProofUtil.sol";
+import {PDPFees} from "../src/Fees.sol";
 import {SimplePDPService} from "../src/SimplePDPService.sol";
-
 
 contract PDPVerifierProofSetCreateDeleteTest is Test {
     SimplePDPService listener;
@@ -35,7 +35,7 @@ contract PDPVerifierProofSetCreateDeleteTest is Test {
 
     function testCreateProofSet() public {
         Cids.Cid memory zeroRoot;
-        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
         listenerAssert.expectEvent(SimplePDPService.OperationType.CREATE, setId);
         assertEq(setId, 0, "First proof set ID should be 0");
         assertEq(pdpVerifier.getProofSetLeafCount(setId), 0, "Proof set leaf count should be 0");
@@ -53,7 +53,7 @@ contract PDPVerifierProofSetCreateDeleteTest is Test {
     }
 
     function testDeleteProofSet() public {
-        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
         listenerAssert.expectEvent(SimplePDPService.OperationType.CREATE, setId);
         pdpVerifier.deleteProofSet(setId);
         listenerAssert.expectEvent(SimplePDPService.OperationType.DELETE, setId);
@@ -63,7 +63,7 @@ contract PDPVerifierProofSetCreateDeleteTest is Test {
     }
 
     function testOnlyOwnerCanDeleteProofSet() public {
-        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
         listenerAssert.expectEvent(SimplePDPService.OperationType.CREATE, setId);
         // Create a new address to act as a non-owner
         address nonOwner = address(0x1234);
@@ -88,7 +88,7 @@ contract PDPVerifierProofSetCreateDeleteTest is Test {
     }
 
     function testMethodsOnDeletedProofSetFails() public {
-        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
         listenerAssert.expectEvent(SimplePDPService.OperationType.CREATE, setId);
         pdpVerifier.deleteProofSet(setId);
         listenerAssert.expectEvent(SimplePDPService.OperationType.DELETE, setId);
@@ -110,12 +110,38 @@ contract PDPVerifierProofSetCreateDeleteTest is Test {
     }
 
     function testGetProofSetID() public {
-        pdpVerifier.createProofSet(address(listener));
+        pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
         listenerAssert.expectEvent(SimplePDPService.OperationType.CREATE, 0);
-        pdpVerifier.createProofSet(address(listener));
+        pdpVerifier.createProofSet{value: PDPFees.sybilFee()} (address(listener));
         listenerAssert.expectEvent(SimplePDPService.OperationType.CREATE, 1);
         assertEq(2, pdpVerifier.getNextProofSetId(), "Next proof set ID should be 2");
         tearDown();
+    }
+
+    receive() external payable {}
+
+    function testCreateProofSetFeeHandling() public {
+        uint256 sybilFee = PDPFees.sybilFee();
+        
+        // Test 1: Fails when sending not enough for sybil fee
+        vm.expectRevert("sybil fee not met");
+        pdpVerifier.createProofSet{value: sybilFee - 1}(address(listener));
+
+        // Test 2: Returns funds over the sybil fee back to the sender
+        uint256 excessAmount = 1 ether;
+        uint256 initialBalance = address(this).balance;
+        
+        uint256 setId = pdpVerifier.createProofSet{value: sybilFee + excessAmount}(address(listener));
+        
+        uint256 finalBalance = address(this).balance;
+        uint256 refundedAmount = finalBalance - (initialBalance - sybilFee - excessAmount);
+        assertEq(refundedAmount, excessAmount, "Excess amount should be refunded");
+
+        // Additional checks to ensure the proof set was created correctly
+        assertEq(pdpVerifier.getProofSetLeafCount(setId), 0, "Proof set leaf count should be 0");
+        (address owner, address proposedOwner) = pdpVerifier.getProofSetOwner(setId);
+        assertEq(owner, address(this), "Proof set owner should be the constructor sender");
+        assertEq(proposedOwner, address(0), "Proof set proposed owner should be initialized to zero address");
     }
 }
 
@@ -145,7 +171,7 @@ contract PDPVerifierOwnershipTest is Test {
     }
 
     function testOwnershipTransfer() public {
-        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
         pdpVerifier.proposeProofSetOwner(setId, nextOwner);
         (address ownerStart, address proposedOwnerStart) = pdpVerifier.getProofSetOwner(setId);
         assertEq(ownerStart, owner, "Proof set owner should be the constructor sender");
@@ -158,7 +184,7 @@ contract PDPVerifierOwnershipTest is Test {
     }
 
     function testOwnershipProposalReset() public {
-        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
         pdpVerifier.proposeProofSetOwner(setId, nextOwner);
         pdpVerifier.proposeProofSetOwner(setId, owner);
         (address ownerEnd, address proposedOwnerEnd) = pdpVerifier.getProofSetOwner(setId);
@@ -167,7 +193,7 @@ contract PDPVerifierOwnershipTest is Test {
     }
 
     function testOwnershipPermissionsRequired() public {
-        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
         vm.prank(nonOwner);
         vm.expectRevert("Only the current owner can propose a new owner");
         pdpVerifier.proposeProofSetOwner(setId, nextOwner);
@@ -186,7 +212,7 @@ contract PDPVerifierOwnershipTest is Test {
     }
 
     function testScheduleRemoveRootsOnlyOwner() public {
-        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
         Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test"));
         PDPVerifier.RootData[] memory rootDataArray = new PDPVerifier.RootData[](1);
         rootDataArray[0] = PDPVerifier.RootData(testCid, 100 * pdpVerifier.LEAF_SIZE());
@@ -228,7 +254,7 @@ contract PDPVerifierProofSetMutateTest is Test {
     }
 
     function testAddRoot() public {
-        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
         listenerAssert.expectEvent(SimplePDPService.OperationType.CREATE, setId);
         PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
         roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
@@ -252,7 +278,7 @@ contract PDPVerifierProofSetMutateTest is Test {
     }
 
     function testAddMultipleRoots() public {
-        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
         listenerAssert.expectEvent(SimplePDPService.OperationType.CREATE, setId);
         PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](2);
         roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test1")), 64);
@@ -284,7 +310,7 @@ contract PDPVerifierProofSetMutateTest is Test {
     }
 
     function testAddBadRoot() public {
-        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
         PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
 
         // Fail when root size is not a multiple of 32
@@ -316,7 +342,7 @@ contract PDPVerifierProofSetMutateTest is Test {
 
     function testAddBadRootsBatched() public {
         // Add one bad root, message fails on bad index
-        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
         PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](4);
         roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 32);
         roots[1] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 32);
@@ -334,7 +360,7 @@ contract PDPVerifierProofSetMutateTest is Test {
 
     function testRemoveRoot() public {
         // Add one root
-        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
         listenerAssert.expectEvent(SimplePDPService.OperationType.CREATE, setId);
         PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
         roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
@@ -361,7 +387,7 @@ contract PDPVerifierProofSetMutateTest is Test {
     }
 
     function testRemoveRootBatch() public {
-        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
         listenerAssert.expectEvent(SimplePDPService.OperationType.CREATE, setId);
         PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](3);
         roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test1")), 64);
@@ -397,7 +423,7 @@ contract PDPVerifierProofSetMutateTest is Test {
     }
 
     function testRemoveFutureRoots() public {
-        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
         listenerAssert.expectEvent(SimplePDPService.OperationType.CREATE, setId);
         PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
         roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
@@ -524,7 +550,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         PDPVerifier.Proof[] memory proofs = buildProofsForSingleton(setId, challengeCount, tree, leafCount);
 
         // Submit proof.
-        pdpVerifier.provePossession(setId, proofs);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(proofs.length)}(setId, proofs);
 
         // Verify the next challenge is in a subsequent epoch.
         listenerAssert.expectEvent(SimplePDPService.OperationType.PROVE_POSSESSION, setId);
@@ -536,6 +562,45 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         listenerAssert.expectEvent(SimplePDPService.OperationType.NEXT_PROVING_PERIOD, setId);
 
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
+        tearDown();
+    }
+
+    receive() external payable {}
+
+    function testProveWithDifferentFeeAmounts() public {
+        uint leafCount = 10;
+        (uint256 setId, bytes32[][] memory tree) = makeProofSetWithOneRoot(leafCount);
+
+        // Advance chain until challenge epoch.
+        uint256 challengeEpoch = pdpVerifier.getNextChallengeEpoch(setId);
+        vm.roll(challengeEpoch);
+
+        // Build a proof with multiple challenges to single tree.
+        uint challengeCount = 3;
+        PDPVerifier.Proof[] memory proofs = buildProofsForSingleton(setId, challengeCount, tree, leafCount);
+
+        // Calculate the correct proof fee
+        uint256 correctProofFee = PDPFees.proofFee(challengeCount);
+
+        // Test 1: Sending less than the required fee
+        uint256 insufficientFee = correctProofFee - 1;
+        vm.expectRevert("Incorrect fee amount");
+        pdpVerifier.provePossession{value: insufficientFee}(setId, proofs);
+
+        // Test 2: Sending more than the required fee
+        uint256 excessFee = correctProofFee + 1 ether;
+        uint256 initialBalance = address(this).balance;
+        
+        pdpVerifier.provePossession{value: excessFee}(setId, proofs);
+        
+        uint256 finalBalance = address(this).balance;
+        uint256 actualFeeSpent = initialBalance - finalBalance;
+        assertEq(actualFeeSpent, correctProofFee, "Only the correct fee should be spent");
+
+        // Verify that the proof was accepted
+        listenerAssert.expectEvent(SimplePDPService.OperationType.PROVE_POSSESSION, setId);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), challengeEpoch, "Next challenge epoch should remain unchanged after prove");
+
         tearDown();
     }
 
@@ -551,7 +616,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         PDPVerifier.Proof[] memory proofs = buildProofsForSingleton(setId, 3, tree, leafCount);
 
         // Submit proof.
-        pdpVerifier.provePossession(setId, proofs);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(proofs.length)}(setId, proofs);
         listenerAssert.expectEvent(SimplePDPService.OperationType.PROVE_POSSESSION, setId);
         tearDown();
     }
@@ -569,24 +634,24 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
 
         // Submit proof.
         vm.expectRevert();
-        pdpVerifier.provePossession(setId, proofs);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(proofs.length)}(setId, proofs);
         tearDown();
     }
 
     function testEmptyProofRejected() public {
-        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
         listenerAssert.expectEvent(SimplePDPService.OperationType.CREATE, setId);
         PDPVerifier.Proof[] memory emptyProof = new PDPVerifier.Proof[](0);
 
         // Rejected with no roots
         vm.expectRevert();
-        pdpVerifier.provePossession(setId, emptyProof);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(0)}(setId, emptyProof);
 
         addOneRoot(setId, 10);
 
         // Rejected with a root
         vm.expectRevert();
-        pdpVerifier.provePossession(setId, emptyProof);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(0)}(setId, emptyProof);
         tearDown();
     }
 
@@ -600,7 +665,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         PDPVerifier.Proof[] memory proofs = buildProofsForSingleton(setId, 3, tree, leafCount);
 
         // Submit proof successfully, advancing the proof set to a new challenge epoch.
-        pdpVerifier.provePossession(setId, proofs);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(proofs.length)}(setId, proofs);
         listenerAssert.expectEvent(SimplePDPService.OperationType.PROVE_POSSESSION, setId);
         pdpVerifier.nextProvingPeriod(setId); // resample
         listenerAssert.expectEvent(SimplePDPService.OperationType.NEXT_PROVING_PERIOD, setId);
@@ -611,7 +676,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
 
         // The proof for the old challenge epoch should no longer be valid.
         vm.expectRevert();
-        pdpVerifier.provePossession(setId, proofs);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(proofs.length)}(setId, proofs);
         tearDown();
     }
 
@@ -639,7 +704,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
 
         // The proof for one root should be invalid against the set with two.
         vm.expectRevert();
-        pdpVerifier.provePossession(setId, proofsOneRoot);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(proofsOneRoot.length)}(setId, proofsOneRoot);
 
         // Remove a root and resample
         uint256[] memory removeRoots = new uint256[](1);
@@ -657,11 +722,11 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         // A proof for two roots should be invalid against the set with one.
         proofsTwoRoots = buildProofs(pdpVerifier, setId, 1, trees, leafCounts); // regen as removal forced resampling challenge seed
         vm.expectRevert();
-        pdpVerifier.provePossession(setId, proofsTwoRoots);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(proofsTwoRoots.length)}(setId, proofsTwoRoots);
 
         // But the single root proof is now good again.
         proofsOneRoot = buildProofsForSingleton(setId, 1, trees[0], leafCounts[0]); // regen as removal forced resampling challenge seed
-        pdpVerifier.provePossession(setId, proofsOneRoot);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(proofsOneRoot.length)}(setId, proofsOneRoot);
         listenerAssert.expectEvent(SimplePDPService.OperationType.PROVE_POSSESSION, setId);
         tearDown();
     }
@@ -683,7 +748,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         uint challengeCount = 11;
         PDPVerifier.Proof[] memory proofs = buildProofs(pdpVerifier, setId, challengeCount, trees, leafCounts);
         // Submit proof.
-        pdpVerifier.provePossession(setId, proofs);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(proofs.length)}(setId, proofs);
         listenerAssert.expectEvent(SimplePDPService.OperationType.PROVE_POSSESSION, setId);
         tearDown();
     }
@@ -703,7 +768,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         }
 
         // Create new proof set and add roots.
-        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
         listenerAssert.expectEvent(SimplePDPService.OperationType.CREATE, setId);
         pdpVerifier.addRoots(setId, roots);
         listenerAssert.expectEvent(SimplePDPService.OperationType.ADD, setId);
@@ -810,7 +875,8 @@ contract SumTreeAddTest is Test {
         SimplePDPService listenerImpl = new SimplePDPService();
         initializeData = abi.encodeWithSelector(SimplePDPService.initialize.selector, address(pdpVerifier));
         MyERC1967Proxy listenerProxy = new MyERC1967Proxy(address(listenerImpl), initializeData);
-        listener = SimplePDPService(address(listenerProxy));        testSetId = pdpVerifier.createProofSet(address(listener));
+        listener = SimplePDPService(address(listenerProxy));       
+        testSetId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
     }
 
     function testMultiAdd() public {
@@ -1143,10 +1209,10 @@ contract PDPListenerIntegrationTest is Test {
         // Can't create a proof set with a bad listener
         badListener.setBadOperation(SimplePDPService.OperationType.CREATE);
         vm.expectRevert("Failing operation");
-        pdpVerifier.createProofSet(address(badListener));
+        pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(badListener));
 
         badListener.setBadOperation(SimplePDPService.OperationType.NONE);
-        pdpVerifier.createProofSet(address(badListener));
+        pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(badListener));
 
         badListener.setBadOperation(SimplePDPService.OperationType.ADD);
         PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
@@ -1190,7 +1256,7 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper {
 
     function testCompleteProvingPeriodE2E() public {
         // Step 1: Create a proof set
-        uint256 setId = pdpVerifier.createProofSet(address(listener));
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener));
 
         // Step 2: Add data `A` in scope for the first proving period
         // Note that the data in the first addRoots call is added to the first proving period
@@ -1250,7 +1316,7 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper {
         // Proving trees for PP1 are just treesA
         PDPVerifier.Proof[] memory proofsPP1 = buildProofs(pdpVerifier, setId, challengeCount, treesA, leafCountsA);
 
-        pdpVerifier.provePossession(setId, proofsPP1);
+        pdpVerifier.provePossession{value: PDPFees.proofFee(proofsPP1.length)}(setId, proofsPP1);
         pdpVerifier.nextProvingPeriod(setId);
         // CHECK: leaf counts
         assertEq(pdpVerifier.getRootLeafCount(setId, 0), leafCountsA[0], "First root leaf count should be the set leaf count");

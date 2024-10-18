@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {BitOps} from "./BitOps.sol";
 import {Cids} from "./Cids.sol";
 import {MerkleVerify} from "./Proofs.sol";
+import {PDPFees} from "./Fees.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -119,7 +120,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    function burnFee(uint256 amount) public payable {
+    function burnFee(uint256 amount) internal {
         require(msg.value >= amount, "Incorrect fee amount");
         (bool success, ) = BURN_ACTOR.call{value: amount}("");
         require(success, "Burn failed");
@@ -229,7 +230,15 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // A proof set is created empty, with no roots. Creation yields a proof set ID
     // for referring to the proof set later.
     // Sender of create message is proof set owner.
-    function createProofSet(address listenerAddr) public returns (uint256) {
+    function createProofSet(address listenerAddr) public payable returns (uint256) {
+        uint256 sybilFee = PDPFees.sybilFee();
+        require(msg.value >= sybilFee, "sybil fee not met");
+        burnFee(sybilFee);
+        if (msg.value > sybilFee) {
+            // Return the overpayment
+            payable(msg.sender).transfer(msg.value - sybilFee);
+        }
+
         uint256 setId = nextProofSetId++;
         proofSetLeafCount[setId] = 0;
         nextChallengeEpoch[setId] = 0;  // Re-initialized when the first root is added.
@@ -344,16 +353,22 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // proof set Merkle roots at some epoch. The challenge seed is determined
     // by the epoch of the previous proof of possession.
     // Note that this method is not restricted to the proof set owner.
-    function provePossession(uint256 setId, Proof[] calldata proofs) public {
+    function provePossession(uint256 setId, Proof[] calldata proofs) public payable{
         uint256 challengeEpoch = nextChallengeEpoch[setId];
         require(block.number >= challengeEpoch, "premature proof");
         require(proofs.length > 0, "empty proof");
-        uint256 seed = drawChallengeSeed(setId);
 
+        // Calculate and burn the proof fee
+        uint256 proofFee = PDPFees.proofFee(proofs.length);
+        burnFee(proofFee);
+        if (msg.value > proofFee) {
+            // Return the overpayment
+            payable(msg.sender).transfer(msg.value - proofFee);
+        }
+
+        uint256 seed = drawChallengeSeed(setId);
         uint256 leafCount = challengeRange[setId];
         uint256 sumTreeTop = 256 - BitOps.clz(nextRootId[setId]);
-
-
         for (uint64 i = 0; i < proofs.length; i++) {
             // Hash (SHA3) the seed,  proof set id, and proof index to create challenge.
             bytes memory payload = abi.encodePacked(seed, setId, i);
